@@ -1,0 +1,13 @@
+{
+  "name":"@backlog-killer/sdk",
+  "version":"0.1.0",
+  "private":true,
+  "type":"module",
+  "main":"./dist/backlog-killer.js",
+  "module":"./dist/index.js",
+  "types":"./src/index.tsx",
+  "exports":{".":{"types":"./src/index.tsx","import":"./src/index.tsx"}},
+  "scripts":{"build":"vite build && vite build --mode iife && tsc --emitDeclarationOnly --declaration --outDir dist/types","lint":"tsc --noEmit","typecheck":"tsc --noEmit","test":"vitest run"},
+  "dependencies":{"html2canvas":"1.4.1","react":"19.1.0","react-dom":"19.1.0"},
+  "devDependencies":{"@types/react":"19.1.6","@types/react-dom":"19.1.5","@vitejs/plugin-react":"4.5.0","jsdom":"26.1.0","typescript":"5.8.3","vite":"6.3.5","vitest":"3.1.4"}
+}
