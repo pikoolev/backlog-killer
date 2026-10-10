@@ -172,9 +172,64 @@ func (s *Service) List(ctx context.Context, tenant, project string, statuses []S
 	})
 	return out, err
 }
-func (s *Service) Transition(ctx context.Context, tenant, project, id string, version int64, a Actor, in TransitionInput) (Ticket, error) {
+func (s *Service) ListFiltered(ctx context.Context, tenant, project string, statuses []Status, page string, limit int, cursor time.Time) ([]Ticket, *time.Time, error) {
+	if limit < 1 || limit > 100 {
+		limit = 50
+	}
+	statusValues := make([]string, len(statuses))
+	for i, status := range statuses {
+		statusValues[i] = string(status)
+	}
+	out := []Ticket{}
+	var next *time.Time
+	err := store.WithTenant(ctx, s.DB, tenant, func(ctx context.Context, tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, ticketSelect+` WHERE t.project_id=$1 AND (cardinality($2::text[])=0 OR t.status::text=ANY($2::text[])) AND ($3='' OR p.url_path=$3 OR (p.url_pattern IS NOT NULL AND $3 LIKE replace(p.url_pattern,'*','%'))) AND ($4::timestamptz IS NULL OR t.updated_at<$4) ORDER BY t.updated_at DESC,t.id DESC LIMIT $5`, project, statusValues, page, func() any {
+			if cursor.IsZero() {
+				return nil
+			}
+			return cursor
+		}(), limit+1)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var t Ticket
+			if err = scanTicket(rows, &t); err != nil {
+				return err
+			}
+			out = append(out, t)
+		}
+		return rows.Err()
+	})
+	if len(out) > limit {
+		value := out[limit-1].UpdatedAt
+		next = &value
+		out = out[:limit]
+	}
+	return out, next, err
+}
+func (s *Service) Transition(ctx context.Context, tenant, project, id string, version int64, principal, key string, a Actor, in TransitionInput) (Ticket, error) {
 	var out Ticket
 	err := store.WithTenant(ctx, s.DB, tenant, func(ctx context.Context, tx pgx.Tx) error {
+		var requestHash [32]byte
+		if key != "" {
+			requestHash = HashRequest(map[string]any{"ticketId": id, "version": version, "transition": in})
+			if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, principal+":"+project+":"+key); err != nil {
+				return err
+			}
+			var storedHash, storedResponse []byte
+			lookup := tx.QueryRow(ctx, `SELECT request_hash,response FROM idempotency_keys WHERE project_id=$1 AND principal=$2 AND key=$3`, project, principal, key).Scan(&storedHash, &storedResponse)
+			if lookup == nil {
+				if !bytes.Equal(storedHash, requestHash[:]) {
+					return &Error{"idempotency_conflict", 409, "Idempotency-Key reused with different payload"}
+				}
+				return json.Unmarshal(storedResponse, &out)
+			}
+			if !errors.Is(lookup, pgx.ErrNoRows) {
+				return lookup
+			}
+		}
 		if err := scanTicket(tx.QueryRow(ctx, `SELECT t.id,t.tenant_id,t.project_id,t.text,t.specification,t.priority,t.due_date,t.status,t.version,p.url_path,COALESCE(p.url_pattern,''),p.title,t.anchor,t.selection,t.context,t.created_at,t.updated_at FROM tickets t JOIN pages p ON (p.tenant_id,p.project_id,p.id)=(t.tenant_id,t.project_id,t.page_id) WHERE t.project_id=$1 AND t.id=$2 FOR UPDATE OF t`, project, id), &out); err != nil {
 			return err
 		}
@@ -222,16 +277,45 @@ func (s *Service) Transition(ctx context.Context, tenant, project, id string, ve
 		out.Status = in.To
 		out.Version++
 		out.UpdatedAt = time.Now()
+		if key != "" {
+			response, _ := json.Marshal(out)
+			if _, err = tx.Exec(ctx, `INSERT INTO idempotency_keys(tenant_id,project_id,principal,key,request_hash,status_code,response) VALUES($1,$2,$3,$4,$5,200,$6)`, tenant, project, principal, key, requestHash[:], response); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 	return out, err
 }
-func (s *Service) Claim(ctx context.Context, tenant, project string, ids []string, a Actor) (string, error) {
+func (s *Service) Claim(ctx context.Context, tenant, project, principal, key string, ids []string, a Actor) (string, error) {
 	if len(ids) < 1 || len(ids) > 50 {
 		return "", &Error{"invalid_request", 400, "claim requires 1..50 tickets"}
 	}
+	if key == "" {
+		return "", &Error{"idempotency_key_required", 400, "Idempotency-Key required"}
+	}
 	batch := uuid.Must(uuid.NewV7()).String()
 	err := store.WithTenant(ctx, s.DB, tenant, func(ctx context.Context, tx pgx.Tx) error {
+		requestHash := HashRequest(ids)
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, principal+":"+project+":"+key); err != nil {
+			return err
+		}
+		var storedHash, storedResponse []byte
+		lookup := tx.QueryRow(ctx, `SELECT request_hash,response FROM idempotency_keys WHERE project_id=$1 AND principal=$2 AND key=$3`, project, principal, key).Scan(&storedHash, &storedResponse)
+		if lookup == nil {
+			if !bytes.Equal(storedHash, requestHash[:]) {
+				return &Error{"idempotency_conflict", 409, "Idempotency-Key reused with different payload"}
+			}
+			var response map[string]string
+			if err := json.Unmarshal(storedResponse, &response); err != nil {
+				return err
+			}
+			batch = response["batchId"]
+			return nil
+		}
+		if !errors.Is(lookup, pgx.ErrNoRows) {
+			return lookup
+		}
 		rows, err := tx.Query(ctx, `SELECT id,status,claimed_batch_id FROM tickets WHERE project_id=$1 AND id=ANY($2::uuid[]) FOR UPDATE`, project, ids)
 		if err != nil {
 			return err
@@ -239,22 +323,27 @@ func (s *Service) Claim(ctx context.Context, tenant, project string, ids []strin
 		count := 0
 		for rows.Next() {
 			var id string
-			var st Status
+			var status Status
 			var claimed *string
-			if err = rows.Scan(&id, &st, &claimed); err != nil {
+			if err = rows.Scan(&id, &status, &claimed); err != nil {
+				rows.Close()
 				return err
 			}
 			count++
-			if (st != InProgress && st != Rework) || claimed != nil {
+			if (status != InProgress && status != Rework) || claimed != nil {
+				rows.Close()
 				return &Error{"claim_conflict", 409, "batch contains unavailable ticket"}
 			}
+		}
+		if err = rows.Err(); err != nil {
+			rows.Close()
+			return err
 		}
 		rows.Close()
 		if count != len(ids) {
 			return ErrNotFound
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO agent_batches(id,tenant_id,project_id,owner_subject) VALUES($1,$2,$3,$4)`, batch, tenant, project, a.ID)
-		if err != nil {
+		if _, err = tx.Exec(ctx, `INSERT INTO agent_batches(id,tenant_id,project_id,owner_subject) VALUES($1,$2,$3,$4)`, batch, tenant, project, a.ID); err != nil {
 			return err
 		}
 		for _, id := range ids {
@@ -265,7 +354,9 @@ func (s *Service) Claim(ctx context.Context, tenant, project string, ids []strin
 				return err
 			}
 		}
-		return nil
+		response, _ := json.Marshal(map[string]string{"batchId": batch})
+		_, err = tx.Exec(ctx, `INSERT INTO idempotency_keys(tenant_id,project_id,principal,key,request_hash,status_code,response) VALUES($1,$2,$3,$4,$5,201,$6)`, tenant, project, principal, key, requestHash[:], response)
+		return err
 	})
 	return batch, err
 }
@@ -274,7 +365,7 @@ func allow(from Status, in TransitionInput, a Actor) error {
 	triage := admin || a.Role == "triager"
 	agent := a.Kind == "agent" || a.Role == "agent"
 	ok := false
-	if triage && ((from == New && in.To == Clarification) || (from == Clarification && in.To == New) || ((from == New || from == Clarification) && in.To == InProgress) || in.To == Deleted || (from == Deleted && in.To != Done)) {
+	if triage && ((from == New && in.To == Clarification) || (from == Clarification && in.To == New) || ((from == New || from == Clarification) && in.To == InProgress)) {
 		ok = true
 	}
 	if agent && (from == InProgress || from == Rework) && in.To == Review && in.AgentComment != "" && in.WorkLog != "" {

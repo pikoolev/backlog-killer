@@ -34,8 +34,9 @@ services:
       context: .
       dockerfile: infra/api.Dockerfile
     environment:
+      APP_ENV: ${APP_ENV:-development}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-saas}
-      LOCAL_DEMO_SEED: "true"
+      LOCAL_DEMO_SEED: ${LOCAL_DEMO_SEED:-true}
       DATABASE_URL: postgres://backlog_runtime:${POSTGRES_PASSWORD:-local-runtime-password}@postgres:5432/${POSTGRES_DB:-backlog_killer}?sslmode=disable
       MIGRATION_DATABASE_URL: postgres://${POSTGRES_MIGRATION_USER:-backlog_migrator}:${POSTGRES_MIGRATION_PASSWORD:-local-migrator-password}@postgres:5432/${POSTGRES_DB:-backlog_killer}?sslmode=disable
       OIDC_ISSUER: http://keycloak:8080/realms/backlog-killer
@@ -49,6 +50,12 @@ services:
       STORAGE_DRIVER: filesystem
       STORAGE_PATH: /data/uploads
       MCP_ALLOWED_ORIGINS: http://127.0.0.1:4173
+      ONPREM_TENANT_NAME: ${ONPREM_TENANT_NAME:-}
+      ONPREM_PROJECT_NAME: ${ONPREM_PROJECT_NAME:-}
+      ONPREM_PROJECT_KEY: ${ONPREM_PROJECT_KEY:-}
+      ONPREM_OWNER_SUBJECT: ${ONPREM_OWNER_SUBJECT:-}
+      ONPREM_OWNER_EMAIL: ${ONPREM_OWNER_EMAIL:-}
+      ONPREM_PROJECT_ORIGIN: ${ONPREM_PROJECT_ORIGIN:-}
     ports: ["127.0.0.1:${API_PORT:-18080}:8080"]
     volumes: ["uploads:/data/uploads"]
     depends_on:

@@ -53,7 +53,7 @@ func TestDualClaimHasOneWinner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ticket, err = service.Transition(context.Background(), demoTenant, demoProject, ticket.ID, 1, Actor{Kind: "user", ID: "30000000-0000-4000-8000-000000000002", Role: "triager"}, TransitionInput{To: InProgress})
+	ticket, err = service.Transition(context.Background(), demoTenant, demoProject, ticket.ID, 1, "user:test", "", Actor{Kind: "user", ID: "30000000-0000-4000-8000-000000000002", Role: "triager"}, TransitionInput{To: InProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestDualClaimHasOneWinner(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			<-start
-			_, claimErr := service.Claim(context.Background(), demoTenant, demoProject, []string{ticket.ID}, Actor{Kind: "agent", ID: string(rune('a' + id)), Role: "agent"})
+			_, claimErr := service.Claim(context.Background(), demoTenant, demoProject, "agent:"+string(rune('a'+id)), uuid.NewString(), []string{ticket.ID}, Actor{Kind: "agent", ID: string(rune('a' + id)), Role: "agent"})
 			results <- claimErr
 		}(index)
 	}
@@ -83,5 +83,49 @@ func TestDualClaimHasOneWinner(t *testing.T) {
 	}
 	if success != 1 {
 		t.Fatalf("claim winners=%d failures=%v", success, failures)
+	}
+}
+
+func TestMixedBulkRollsBack(t *testing.T) {
+	service := integrationService(t)
+	ticket, err := service.Create(context.Background(), demoTenant, demoProject, "test:bulk", uuid.NewString(), Actor{Kind: "user", ID: "30000000-0000-4000-8000-000000000002", Role: "triager"}, CreateInput{Text: "bulk rollback", Priority: 2, Page: Page{URLPath: "/", Title: "test"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	priority := 5
+	err = service.Bulk(context.Background(), demoTenant, demoProject, "user:test", uuid.NewString(), Actor{Kind: "user", ID: "30000000-0000-4000-8000-000000000002", Role: "triager"}, BulkInput{TicketIDs: []string{ticket.ID, uuid.NewString()}, Action: "set_priority", Priority: &priority})
+	if err != ErrNotFound {
+		t.Fatalf("error=%v", err)
+	}
+	after, err := service.Get(context.Background(), demoTenant, demoProject, ticket.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Priority != 2 || after.Version != 1 {
+		t.Fatalf("partial mutation: priority=%d version=%d", after.Priority, after.Version)
+	}
+}
+
+func TestClaimIdempotencyReplay(t *testing.T) {
+	service := integrationService(t)
+	ticket, err := service.Create(context.Background(), demoTenant, demoProject, "test:claim-replay", uuid.NewString(), Actor{Kind: "user", ID: "30000000-0000-4000-8000-000000000002", Role: "triager"}, CreateInput{Text: "claim replay", Priority: 4, Page: Page{URLPath: "/", Title: "test"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticket, err = service.Transition(context.Background(), demoTenant, demoProject, ticket.ID, 1, "user:test", "", Actor{Kind: "user", ID: "30000000-0000-4000-8000-000000000002", Role: "triager"}, TransitionInput{To: InProgress})
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := uuid.NewString()
+	first, err := service.Claim(context.Background(), demoTenant, demoProject, "agent:replay", key, []string{ticket.ID}, Actor{Kind: "agent", ID: "replay", Role: "agent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.Claim(context.Background(), demoTenant, demoProject, "agent:replay", key, []string{ticket.ID}, Actor{Kind: "agent", ID: "replay", Role: "agent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Fatalf("batch replay mismatch %s %s", first, second)
 	}
 }

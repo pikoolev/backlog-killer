@@ -18,6 +18,14 @@ Set `ONPREM_TENANT_NAME`, `ONPREM_PROJECT_NAME`, `ONPREM_PROJECT_KEY`, `ONPREM_P
 - Rotate OIDC client secrets, embed signing keys, PATs, database passwords, and proxy credentials. PAT revocation state is persisted in PostgreSQL.
 - Run migrations before traffic by starting the API. Migrations and bootstrap are idempotent.
 
+Use `docker compose -f docker-compose.yml -f compose.production.yml up -d` for Internet-facing operation. Set `APP_ENV=production`; this rejects `LOCAL_DEMO_SEED=true` and non-TLS public API/web/OIDC URLs. The production overlay removes direct service ports, runs Keycloak in production mode against PostgreSQL, and exposes only Caddy on ports 80/443.
+
+Health endpoints distinguish process liveness (`/livez`) from PostgreSQL health (`/healthz`) and complete storage/database readiness (`/readyz`). Scrape `/metrics` from a protected monitoring network. Rate limits protect embed authentication, ticket mutations, uploads, and MCP.
+
+Run `BACKUP_DIR=/secure/path ./scripts/backup.sh` from the deployment directory. The script writes a PostgreSQL custom-format dump, attachment-volume archive, and SHA-256 manifest under one timestamped recovery point.
+
+Restore a complete recovery point only during a write outage: `BACKUP_PATH=/secure/path/<timestamp> POSTGRES_MIGRATION_USER=backlog_migrator POSTGRES_DB=backlog_killer ./scripts/restore.sh`. The command verifies `SHA256SUMS`, replaces database objects from the custom-format dump, then replaces attachment-volume contents.
+
 ## Upgrade and restore
 
 1. Stop writes or take an application-consistent database and attachment snapshot.

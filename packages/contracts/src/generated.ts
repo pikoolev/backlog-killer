@@ -4,22 +4,6 @@
  */
 
 export interface paths {
-    "/health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["health"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/me": {
         parameters: {
             query?: never;
@@ -46,6 +30,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["createTenant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invitations/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["acceptInvitation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -83,10 +99,26 @@ export interface paths {
         get: operations["getTicket"];
         put?: never;
         post?: never;
-        delete?: never;
+        delete: operations["deleteTicket"];
         options?: never;
         head?: never;
         patch: operations["updateTicket"];
+        trace?: never;
+    };
+    "/projects/{projectId}/tickets/{ticketId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["restoreTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/projects/{projectId}/tickets/{ticketId}/transition": {
@@ -99,6 +131,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["transitionTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/tickets/{ticketId}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["commentTicket"];
         delete?: never;
         options?: never;
         head?: never;
@@ -121,22 +169,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/projects/{projectId}/agent-batches": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["claimBatch"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/projects/{projectId}/tickets/{ticketId}/attachments": {
         parameters: {
             query?: never;
@@ -153,29 +185,177 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/attachments/{attachmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                attachmentId: string;
+            };
+            cookie?: never;
+        };
+        get: operations["downloadAttachment"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteAttachment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/agent-batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listBatches"];
+        put?: never;
+        post: operations["claimBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/agent-batches/{batchId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["unassignBatch"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getProjectSource"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getProjectSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/origins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["addOrigin"];
+        delete: operations["removeOrigin"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/members/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["removeMember"];
+        options?: never;
+        head?: never;
+        patch: operations["updateMember"];
+        trace?: never;
+    };
+    "/projects/{projectId}/agent-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAgentTokens"];
+        put?: never;
+        post: operations["createAgentToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/agent-tokens/{tokenId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["revokeAgentToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @enum {string} */
         TicketStatus: "new" | "needs_clarification" | "in_progress" | "review" | "rework" | "done" | "deleted";
-        /** @enum {string} */
-        Role: "owner" | "admin" | "triager" | "reporter" | "agent";
-        Me: {
-            principal: {
-                [key: string]: unknown;
-            };
-            projects: components["schemas"]["ProjectMembership"][];
-        };
-        ProjectMembership: {
-            /** Format: uuid */
-            tenantId: string;
-            /** Format: uuid */
-            projectId: string;
-            projectKey: string;
-            name: string;
-            role: components["schemas"]["Role"];
-        };
         Page: {
             urlPath: string;
             urlPattern?: string;
@@ -213,40 +393,34 @@ export interface components {
         };
         UpdateTicket: {
             text?: string;
-            priority?: number;
-            /** Format: date */
-            dueDate?: string | null;
             specification?: string;
-        };
-        TransitionRequest: {
-            to: components["schemas"]["TicketStatus"];
-            agentComment?: string;
-            workLog?: string;
-            userComment?: string;
-        };
-        BulkRequest: {
-            ticketIds: string[];
-            /** @enum {string} */
-            action: "set_due_date" | "set_priority" | "delete";
+            priority?: number;
             /** Format: date */
             dueDate?: string | null;
-            priority?: number;
+            status?: components["schemas"]["TicketStatus"];
         };
         Ticket: components["schemas"]["CreateTicket"] & {
             /** Format: uuid */
             id: string;
-            /** Format: uuid */
-            tenantId: string;
-            /** Format: uuid */
-            projectId: string;
             status: components["schemas"]["TicketStatus"];
             version: number;
             specification?: string;
-            permissions?: string[];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        TicketDetail: components["schemas"]["Ticket"] & {
+            events: {
+                [key: string]: unknown;
+            }[];
+            attachments: {
+                [key: string]: unknown;
+            }[];
+            batch?: {
+                [key: string]: unknown;
+            } | null;
+            permissions: string[];
         };
         Error: {
             code: string;
@@ -258,6 +432,17 @@ export interface components {
         };
     };
     responses: {
+        /** @description JSON response */
+        JSON: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
         /** @description Error */
         Error: {
             headers: {
@@ -274,30 +459,20 @@ export interface components {
         IfMatch: string;
         IdempotencyKey: string;
     };
-    requestBodies: never;
+    requestBodies: {
+        JSON: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+    };
     headers: never;
     pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    health: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description healthy */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     getMe: {
         parameters: {
             query?: never;
@@ -307,42 +482,46 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current identity */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Me"];
-                };
-            };
+            200: components["responses"]["JSON"];
             default: components["responses"]["Error"];
         };
     };
     createTenant: {
         parameters: {
             query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    name: string;
-                };
-            };
-        };
+        requestBody: components["requestBodies"]["JSON"];
         responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
+            201: components["responses"]["JSON"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["JSON"];
+        responses: {
+            201: components["responses"]["JSON"];
+            default: components["responses"]["Error"];
+        };
+    };
+    acceptInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["JSON"];
+        responses: {
+            200: components["responses"]["JSON"];
             default: components["responses"]["Error"];
         };
     };
@@ -350,7 +529,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["TicketStatus"][];
-                priority?: number;
+                page?: string;
                 cursor?: string;
                 limit?: number;
             };
@@ -418,15 +597,33 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Ticket */
+            /** @description Detail */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Ticket"];
+                    "application/json": components["schemas"]["TicketDetail"];
                 };
             };
+            default: components["responses"]["Error"];
+        };
+    };
+    deleteTicket: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                ticketId: components["parameters"]["TicketId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
             default: components["responses"]["Error"];
         };
     };
@@ -448,15 +645,25 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Ticket"];
-                };
+            200: components["responses"]["JSON"];
+            default: components["responses"]["Error"];
+        };
+    };
+    restoreTicket: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
             };
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                ticketId: components["parameters"]["TicketId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
             default: components["responses"]["Error"];
         };
     };
@@ -472,21 +679,27 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TransitionRequest"];
-            };
-        };
+        requestBody: components["requestBodies"]["JSON"];
         responses: {
-            /** @description Transitioned */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Ticket"];
-                };
+            200: components["responses"]["JSON"];
+            default: components["responses"]["Error"];
+        };
+    };
+    commentTicket: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": components["parameters"]["IfMatch"];
             };
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                ticketId: components["parameters"]["TicketId"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["JSON"];
+        responses: {
+            200: components["responses"]["JSON"];
             default: components["responses"]["Error"];
         };
     };
@@ -501,48 +714,9 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BulkRequest"];
-            };
-        };
+        requestBody: components["requestBodies"]["JSON"];
         responses: {
-            /** @description Updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Error"];
-        };
-    };
-    claimBatch: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
-            path: {
-                projectId: components["parameters"]["ProjectId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    ticketIds: string[];
-                };
-            };
-        };
-        responses: {
-            /** @description Claimed */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
+            200: components["responses"]["JSON"];
             default: components["responses"]["Error"];
         };
     };
@@ -565,8 +739,279 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Uploaded */
-            201: {
+            201: components["responses"]["JSON"];
+            default: components["responses"]["Error"];
+        };
+    };
+    downloadAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                attachmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Attachment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    deleteAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                attachmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    listBatches: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["Error"];
+        };
+    };
+    claimBatch: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["JSON"];
+        responses: {
+            201: components["responses"]["JSON"];
+            default: components["responses"]["Error"];
+        };
+    };
+    unassignBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                batchId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unassigned */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getProjectSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getProjectSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["Error"];
+        };
+    };
+    addOrigin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["JSON"];
+        responses: {
+            201: components["responses"]["JSON"];
+            default: components["responses"]["Error"];
+        };
+    };
+    removeOrigin: {
+        parameters: {
+            query: {
+                origin: string;
+            };
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    createInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["JSON"];
+        responses: {
+            201: components["responses"]["JSON"];
+            default: components["responses"]["Error"];
+        };
+    };
+    removeMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    updateMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["JSON"];
+        responses: {
+            /** @description Updated */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    listAgentTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["JSON"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createAgentToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["JSON"];
+        responses: {
+            201: components["responses"]["JSON"];
+            default: components["responses"]["Error"];
+        };
+    };
+    revokeAgentToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                tokenId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };

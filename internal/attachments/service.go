@@ -129,6 +129,49 @@ func (s *Service) Open(ctx context.Context, tenant, project, id string) (io.Read
 	file, err := os.Open(filepath.Join(s.Root, key))
 	return file, out, err
 }
+func (s *Service) Delete(ctx context.Context, tenant, project, id string) error {
+	var key string
+	err := store.WithTenant(ctx, s.DB, tenant, func(ctx context.Context, tx pgx.Tx) error {
+		if err := tx.QueryRow(ctx, `UPDATE ticket_attachments SET deleted_at=now() WHERE project_id=$1 AND id=$2 AND deleted_at IS NULL RETURNING storage_key`, project, id).Scan(&key); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO storage_deletions(storage_key) VALUES($1) ON CONFLICT(storage_key) DO NOTHING`, key)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	if err = os.Remove(filepath.Join(s.Root, key)); err == nil || errors.Is(err, os.ErrNotExist) {
+		_, _ = s.DB.Exec(ctx, `UPDATE storage_deletions SET completed_at=now() WHERE storage_key=$1`, key)
+		return nil
+	}
+	return nil
+}
+func (s *Service) Cleanup(ctx context.Context) error {
+	rows, err := s.DB.Query(ctx, `SELECT storage_key FROM storage_deletions WHERE completed_at IS NULL AND next_attempt_at<=now() LIMIT 100`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var keys []string
+	for rows.Next() {
+		var key string
+		if err = rows.Scan(&key); err != nil {
+			return err
+		}
+		keys = append(keys, key)
+	}
+	for _, key := range keys {
+		err = os.Remove(filepath.Join(s.Root, key))
+		if err == nil || errors.Is(err, os.ErrNotExist) {
+			_, _ = s.DB.Exec(ctx, `UPDATE storage_deletions SET completed_at=now() WHERE storage_key=$1`, key)
+		} else {
+			_, _ = s.DB.Exec(ctx, `UPDATE storage_deletions SET attempts=attempts+1,next_attempt_at=now()+interval '5 minutes' WHERE storage_key=$1`, key)
+		}
+	}
+	return rows.Err()
+}
+
 func Disposition(name, media string) string {
 	kind := "attachment"
 	if strings.HasPrefix(media, "image/") {

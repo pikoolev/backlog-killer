@@ -17,3 +17,9 @@ Browser input, OpenAPI payloads, OIDC claims, PATs, MCP calls, filenames, and st
 Migration credentials own schema objects but cannot log in at runtime. `backlog_runtime` is non-owner, non-superuser, and cannot bypass RLS. Missing tenant context denies business rows.
 
 Logs contain request IDs and operational metadata only: no bearer tokens, invitation codes, query strings, ticket bodies, form values, or attachment bytes.
+
+## Runtime controls
+
+The API exposes separate liveness and readiness probes, Prometheus-format request counters, bounded request bodies/timeouts, and per-principal/IP rate limits. A lifecycle worker retries attachment deletion outbox records and expires old embed flows, idempotency responses, and invitations. Project CORS remains exact-origin; dashboard CORS permits only the configured `WEB_PUBLIC_URL`.
+
+Production runs behind the pinned Caddy TLS proxy. PostgreSQL, Keycloak, API, and dashboard do not publish host ports in the production overlay. Keycloak uses PostgreSQL rather than its development database. `APP_ENV=production` fails closed when demo seed is enabled or a public URL is not HTTPS.

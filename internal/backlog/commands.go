@@ -1,8 +1,10 @@
 package backlog
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -40,14 +42,32 @@ func (s *Service) Comment(ctx context.Context, tenant, project, id string, versi
 	})
 	return out, err
 }
-func (s *Service) Bulk(ctx context.Context, tenant, project string, a Actor, input BulkInput) error {
+func (s *Service) Bulk(ctx context.Context, tenant, project, principal, key string, a Actor, input BulkInput) error {
 	if len(input.TicketIDs) < 1 || len(input.TicketIDs) > 200 {
 		return &Error{"invalid_request", 400, "bulk requires 1..200 tickets"}
 	}
 	if input.Action != "set_due_date" && input.Action != "set_priority" && input.Action != "delete" {
 		return &Error{"invalid_request", 400, "unsupported bulk action"}
 	}
+	if key == "" {
+		return &Error{"idempotency_key_required", 400, "Idempotency-Key required"}
+	}
 	return store.WithTenant(ctx, s.DB, tenant, func(ctx context.Context, tx pgx.Tx) error {
+		requestHash := HashRequest(input)
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, principal+":"+project+":"+key); err != nil {
+			return err
+		}
+		var storedHash []byte
+		lookup := tx.QueryRow(ctx, `SELECT request_hash FROM idempotency_keys WHERE project_id=$1 AND principal=$2 AND key=$3`, project, principal, key).Scan(&storedHash)
+		if lookup == nil {
+			if !bytes.Equal(storedHash, requestHash[:]) {
+				return &Error{"idempotency_conflict", 409, "Idempotency-Key reused with different payload"}
+			}
+			return nil
+		}
+		if !errors.Is(lookup, pgx.ErrNoRows) {
+			return lookup
+		}
 		rows, err := tx.Query(ctx, `SELECT id,status FROM tickets WHERE project_id=$1 AND id=ANY($2::uuid[]) FOR UPDATE`, project, input.TicketIDs)
 		if err != nil {
 			return err
@@ -64,6 +84,11 @@ func (s *Service) Bulk(ctx context.Context, tenant, project string, a Actor, inp
 		rows.Close()
 		if len(found) != len(input.TicketIDs) {
 			return ErrNotFound
+		}
+		for _, status := range found {
+			if status == Done || status == Deleted {
+				return &Error{"invalid_transition", 409, "closed tickets cannot be changed by bulk operation"}
+			}
 		}
 		for _, id := range input.TicketIDs {
 			metadata := map[string]any{"action": input.Action}
@@ -92,7 +117,9 @@ func (s *Service) Bulk(ctx context.Context, tenant, project string, a Actor, inp
 				return err
 			}
 		}
-		return nil
+		response, _ := json.Marshal(map[string]any{"updated": len(input.TicketIDs)})
+		_, err = tx.Exec(ctx, `INSERT INTO idempotency_keys(tenant_id,project_id,principal,key,request_hash,status_code,response) VALUES($1,$2,$3,$4,$5,200,$6)`, tenant, project, principal, key, requestHash[:], response)
+		return err
 	})
 }
 func CanonicalResponse(value any) json.RawMessage { data, _ := json.Marshal(value); return data }

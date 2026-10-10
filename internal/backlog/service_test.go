@@ -19,6 +19,9 @@ func TestTransitionMatrix(t *testing.T) {
 		{"admin rework requires comment", Review, Rework, Actor{Role: "admin"}, "", "", "", false},
 		{"admin accepts", Review, Done, Actor{Role: "admin"}, "", "", "", true},
 		{"agent cannot accept", Review, Done, Actor{Kind: "agent", Role: "agent"}, "", "", "", false},
+		{"triager cannot delete by transition", InProgress, Deleted, Actor{Role: "triager"}, "", "", "", false},
+		{"admin cannot arbitrary restore", Deleted, Review, Actor{Role: "admin"}, "", "", "", false},
+		{"triager clarification", New, Clarification, Actor{Role: "triager"}, "", "", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -35,5 +38,32 @@ func TestParseVersion(t *testing.T) {
 	}
 	if _, err := ParseVersion("12"); err == nil {
 		t.Fatal("unquoted version accepted")
+	}
+}
+
+func TestPermissionMatrix(t *testing.T) {
+	tests := []struct {
+		name   string
+		actor  Actor
+		status Status
+		want   map[string]bool
+	}{
+		{"reporter", Actor{Role: "reporter"}, New, map[string]bool{"read": true, "comment": true}},
+		{"triager", Actor{Role: "triager"}, New, map[string]bool{"read": true, "comment": true, "update": true, "delete": true}},
+		{"admin review", Actor{Role: "admin"}, Review, map[string]bool{"read": true, "comment": true, "update": true, "delete": true, "accept": true, "rework": true}},
+		{"agent", Actor{Kind: "agent", Role: "agent", Scopes: map[string]bool{"tickets:comment": true, "tickets:complete": true}}, Rework, map[string]bool{"read": true, "comment": true, "submit_review": true}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := map[string]bool{}
+			for _, permission := range Permissions(tt.actor, tt.status) {
+				got[permission] = true
+			}
+			for permission, want := range tt.want {
+				if got[permission] != want {
+					t.Fatalf("permission %s=%v", permission, got[permission])
+				}
+			}
+		})
 	}
 }

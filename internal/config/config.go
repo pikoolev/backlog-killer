@@ -9,7 +9,7 @@ import (
 )
 
 type Config struct {
-	Mode, DatabaseURL, MigrationDatabaseURL, OIDCIssuer, OIDCPublicIssuer, OIDCAudience                      string
+	Mode, Environment, DatabaseURL, MigrationDatabaseURL, OIDCIssuer, OIDCPublicIssuer, OIDCAudience         string
 	OIDCClientID, OIDCClientSecret                                                                           string
 	APIPublicURL, WebPublicURL, EmbedSigningKey, StorageDriver, StoragePath                                  string
 	MCPAllowedOrigins                                                                                        []string
@@ -19,7 +19,7 @@ type Config struct {
 
 func Load() (Config, error) {
 	c := Config{
-		Mode: env("DEPLOYMENT_MODE", "saas"), DatabaseURL: os.Getenv("DATABASE_URL"), MigrationDatabaseURL: os.Getenv("MIGRATION_DATABASE_URL"),
+		Mode: env("DEPLOYMENT_MODE", "saas"), Environment: env("APP_ENV", "development"), DatabaseURL: os.Getenv("DATABASE_URL"), MigrationDatabaseURL: os.Getenv("MIGRATION_DATABASE_URL"),
 		OIDCIssuer: os.Getenv("OIDC_ISSUER"), OIDCPublicIssuer: os.Getenv("OIDC_PUBLIC_ISSUER"), OIDCAudience: os.Getenv("OIDC_AUDIENCE"), OIDCClientID: env("OIDC_CLIENT_ID", "backlog-killer-web"), OIDCClientSecret: os.Getenv("OIDC_CLIENT_SECRET"),
 		APIPublicURL: os.Getenv("API_PUBLIC_URL"), WebPublicURL: os.Getenv("WEB_PUBLIC_URL"), EmbedSigningKey: os.Getenv("EMBED_SIGNING_KEY"),
 		StorageDriver: env("STORAGE_DRIVER", "filesystem"), StoragePath: os.Getenv("STORAGE_PATH"), MCPAllowedOrigins: split(os.Getenv("MCP_ALLOWED_ORIGINS")),
@@ -31,6 +31,15 @@ func Load() (Config, error) {
 		return c, errors.New("LOCAL_DEMO_SEED must be true or false")
 	}
 	c.LocalDemoSeed = seed == "true"
+	if c.LocalDemoSeed && c.Environment != "development" {
+		return c, errors.New("LOCAL_DEMO_SEED is forbidden outside development")
+	}
+	if c.Environment != "development" && c.Environment != "production" {
+		return c, errors.New("APP_ENV must be development or production")
+	}
+	if c.Environment == "production" && (strings.HasPrefix(c.APIPublicURL, "http://") || strings.HasPrefix(c.WebPublicURL, "http://") || strings.HasPrefix(c.OIDCPublicIssuer, "http://")) {
+		return c, errors.New("production public URLs must use https")
+	}
 	if c.Mode != "saas" && c.Mode != "onprem" {
 		return c, errors.New("DEPLOYMENT_MODE must be saas or onprem")
 	}

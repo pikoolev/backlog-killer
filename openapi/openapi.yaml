@@ -1,90 +1,65 @@
 openapi: 3.1.0
 info: {title: Backlog Killer API, version: 1.0.0}
-servers: [{url: http://127.0.0.1:18080/v1}]
+servers: [{url: https://api.example.test/v1}]
 security: [{bearerAuth: []}]
 paths:
-  /health:
-    get: {security: [], operationId: health, responses: {'200': {description: healthy}}}
-  /me:
-    get:
-      operationId: getMe
-      responses: {'200': {description: Current identity, content: {application/json: {schema: {$ref: '#/components/schemas/Me'}}}}, default: {$ref: '#/components/responses/Error'}}
+  /me: {get: {operationId: getMe, responses: {'200': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}}
   /tenants:
-    post:
-      operationId: createTenant
-      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
-      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [name], properties: {name: {type: string, minLength: 1, maxLength: 200}}}}}}
-      responses: {'201': {description: Created}, default: {$ref: '#/components/responses/Error'}}
+    post: {operationId: createTenant, requestBody: {$ref: '#/components/requestBodies/JSON'}, responses: {'201': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}
+  /projects: {post: {operationId: createProject, requestBody: {$ref: '#/components/requestBodies/JSON'}, responses: {'201': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}}
+  /invitations/accept:
+    post: {operationId: acceptInvitation, requestBody: {$ref: '#/components/requestBodies/JSON'}, responses: {'200': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}
   /projects/{projectId}/tickets:
     parameters: [{$ref: '#/components/parameters/ProjectId'}]
     get:
       operationId: listTickets
-      parameters:
-        - {name: status, in: query, schema: {type: array, items: {$ref: '#/components/schemas/TicketStatus'}}}
-        - {name: priority, in: query, schema: {type: integer, minimum: 1, maximum: 5}}
-        - {name: cursor, in: query, schema: {type: string}}
-        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
-      responses: {'200': {description: Tickets, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/Ticket'}}, nextCursor: {type: [string, 'null']}}}}}}, default: {$ref: '#/components/responses/Error'}}
-    post:
-      operationId: createTicket
-      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateTicket'}}}}
-      responses: {'201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Ticket'}}}}, default: {$ref: '#/components/responses/Error'}}
+      parameters: [{name: status, in: query, schema: {type: array, items: {$ref: '#/components/schemas/TicketStatus'}}}, {name: page, in: query, schema: {type: string}}, {name: cursor, in: query, schema: {type: string}}, {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100}}]
+      responses: {'200': {description: Tickets, content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/Ticket'}}, nextCursor: {type: [string,'null']}}}}}}, default: {$ref: '#/components/responses/Error'}}
+    post: {operationId: createTicket, parameters: [{$ref: '#/components/parameters/IdempotencyKey'}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateTicket'}}}}, responses: {'201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Ticket'}}}}, default: {$ref: '#/components/responses/Error'}}}
   /projects/{projectId}/tickets/{ticketId}:
-    parameters: [{$ref: '#/components/parameters/ProjectId'}, {$ref: '#/components/parameters/TicketId'}]
-    get:
-      operationId: getTicket
-      responses: {'200': {description: Ticket, content: {application/json: {schema: {$ref: '#/components/schemas/Ticket'}}}}, default: {$ref: '#/components/responses/Error'}}
-    patch:
-      operationId: updateTicket
-      parameters: [{$ref: '#/components/parameters/IfMatch'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/UpdateTicket'}}}}
-      responses: {'200': {description: Updated, content: {application/json: {schema: {$ref: '#/components/schemas/Ticket'}}}}, default: {$ref: '#/components/responses/Error'}}
-  /projects/{projectId}/tickets/{ticketId}/transition:
-    post:
-      operationId: transitionTicket
-      parameters: [{$ref: '#/components/parameters/ProjectId'}, {$ref: '#/components/parameters/TicketId'}, {$ref: '#/components/parameters/IfMatch'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/TransitionRequest'}}}}
-      responses: {'200': {description: Transitioned, content: {application/json: {schema: {$ref: '#/components/schemas/Ticket'}}}}, default: {$ref: '#/components/responses/Error'}}
-  /projects/{projectId}/tickets/bulk:
-    post:
-      operationId: bulkTickets
-      parameters: [{$ref: '#/components/parameters/ProjectId'}, {$ref: '#/components/parameters/IdempotencyKey'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/BulkRequest'}}}}
-      responses: {'200': {description: Updated}, default: {$ref: '#/components/responses/Error'}}
+    parameters: [{$ref: '#/components/parameters/ProjectId'},{$ref: '#/components/parameters/TicketId'}]
+    get: {operationId: getTicket, responses: {'200': {description: Detail, content: {application/json: {schema: {$ref: '#/components/schemas/TicketDetail'}}}}, default: {$ref: '#/components/responses/Error'}}}
+    patch: {operationId: updateTicket, parameters: [{$ref: '#/components/parameters/IfMatch'}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/UpdateTicket'}}}}, responses: {'200': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}
+    delete: {operationId: deleteTicket, parameters: [{$ref: '#/components/parameters/IfMatch'}], responses: {'200': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}
+  /projects/{projectId}/tickets/{ticketId}/restore: {post: {operationId: restoreTicket, parameters: [{$ref: '#/components/parameters/ProjectId'},{$ref: '#/components/parameters/TicketId'},{$ref: '#/components/parameters/IfMatch'}], responses: {'200': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}}
+  /projects/{projectId}/tickets/{ticketId}/transition: {post: {operationId: transitionTicket, parameters: [{$ref: '#/components/parameters/ProjectId'},{$ref: '#/components/parameters/TicketId'},{$ref: '#/components/parameters/IfMatch'}], requestBody: {$ref: '#/components/requestBodies/JSON'}, responses: {'200': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}}
+  /projects/{projectId}/tickets/{ticketId}/comments: {post: {operationId: commentTicket, parameters: [{$ref: '#/components/parameters/ProjectId'},{$ref: '#/components/parameters/TicketId'},{$ref: '#/components/parameters/IfMatch'}], requestBody: {$ref: '#/components/requestBodies/JSON'}, responses: {'200': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}}
+  /projects/{projectId}/tickets/bulk: {post: {operationId: bulkTickets, parameters: [{$ref: '#/components/parameters/ProjectId'},{$ref: '#/components/parameters/IdempotencyKey'}], requestBody: {$ref: '#/components/requestBodies/JSON'}, responses: {'200': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}}
+  /projects/{projectId}/tickets/{ticketId}/attachments: {post: {operationId: uploadAttachment, parameters: [{$ref: '#/components/parameters/ProjectId'},{$ref: '#/components/parameters/TicketId'}], requestBody: {required: true, content: {multipart/form-data: {schema: {type: object, required: [file], properties: {file: {type: string,format: binary}}}}}}, responses: {'201': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}}
+  /projects/{projectId}/attachments/{attachmentId}:
+    parameters: [{$ref: '#/components/parameters/ProjectId'},{name: attachmentId,in: path,required: true,schema: {type: string,format: uuid}}]
+    get: {operationId: downloadAttachment, responses: {'200': {description: Attachment}, default: {$ref: '#/components/responses/Error'}}}
+    delete: {operationId: deleteAttachment, responses: {'204': {description: Deleted}, default: {$ref: '#/components/responses/Error'}}}
   /projects/{projectId}/agent-batches:
-    post:
-      operationId: claimBatch
-      parameters: [{$ref: '#/components/parameters/ProjectId'}, {$ref: '#/components/parameters/IdempotencyKey'}]
-      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [ticketIds], properties: {ticketIds: {type: array, minItems: 1, maxItems: 50, uniqueItems: true, items: {type: string, format: uuid}}}}}}}
-      responses: {'201': {description: Claimed}, default: {$ref: '#/components/responses/Error'}}
-  /projects/{projectId}/tickets/{ticketId}/attachments:
-    post:
-      operationId: uploadAttachment
-      parameters: [{$ref: '#/components/parameters/ProjectId'}, {$ref: '#/components/parameters/TicketId'}]
-      requestBody: {required: true, content: {multipart/form-data: {schema: {type: object, required: [file], properties: {file: {type: string, format: binary}}}}}}
-      responses: {'201': {description: Uploaded}, default: {$ref: '#/components/responses/Error'}}
+    parameters: [{$ref: '#/components/parameters/ProjectId'}]
+    get: {operationId: listBatches, responses: {'200': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}
+    post: {operationId: claimBatch, parameters: [{$ref: '#/components/parameters/IdempotencyKey'}], requestBody: {$ref: '#/components/requestBodies/JSON'}, responses: {'201': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}
+  /projects/{projectId}/agent-batches/{batchId}: {delete: {operationId: unassignBatch, parameters: [{$ref: '#/components/parameters/ProjectId'},{name: batchId,in: path,required: true,schema: {type: string,format: uuid}}], responses: {'204': {description: Unassigned}, default: {$ref: '#/components/responses/Error'}}}}
+  /projects/{projectId}/source: {get: {operationId: getProjectSource, parameters: [{$ref: '#/components/parameters/ProjectId'}], responses: {'200': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}}
+  /projects/{projectId}/settings: {get: {operationId: getProjectSettings, parameters: [{$ref: '#/components/parameters/ProjectId'}], responses: {'200': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}}
+  /projects/{projectId}/origins: {post: {operationId: addOrigin, parameters: [{$ref: '#/components/parameters/ProjectId'}], requestBody: {$ref: '#/components/requestBodies/JSON'}, responses: {'201': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}, delete: {operationId: removeOrigin, parameters: [{$ref: '#/components/parameters/ProjectId'},{name: origin,in: query,required: true,schema: {type: string}}], responses: {'204': {description: Removed}, default: {$ref: '#/components/responses/Error'}}}}
+  /projects/{projectId}/invitations: {post: {operationId: createInvitation, parameters: [{$ref: '#/components/parameters/ProjectId'}], requestBody: {$ref: '#/components/requestBodies/JSON'}, responses: {'201': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}}
+  /projects/{projectId}/members/{userId}: {patch: {operationId: updateMember, parameters: [{$ref: '#/components/parameters/ProjectId'},{name: userId,in: path,required: true,schema: {type: string,format: uuid}}], requestBody: {$ref: '#/components/requestBodies/JSON'}, responses: {'204': {description: Updated}, default: {$ref: '#/components/responses/Error'}}}, delete: {operationId: removeMember, parameters: [{$ref: '#/components/parameters/ProjectId'},{name: userId,in: path,required: true,schema: {type: string,format: uuid}}], responses: {'204': {description: Removed}, default: {$ref: '#/components/responses/Error'}}}}
+  /projects/{projectId}/agent-tokens: {get: {operationId: listAgentTokens, parameters: [{$ref: '#/components/parameters/ProjectId'}], responses: {'200': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}, post: {operationId: createAgentToken, parameters: [{$ref: '#/components/parameters/ProjectId'}], requestBody: {$ref: '#/components/requestBodies/JSON'}, responses: {'201': {$ref: '#/components/responses/JSON'}, default: {$ref: '#/components/responses/Error'}}}}
+  /projects/{projectId}/agent-tokens/{tokenId}: {delete: {operationId: revokeAgentToken, parameters: [{$ref: '#/components/parameters/ProjectId'},{name: tokenId,in: path,required: true,schema: {type: string,format: uuid}}], responses: {'204': {description: Revoked}, default: {$ref: '#/components/responses/Error'}}}}
 components:
-  securitySchemes:
-    bearerAuth: {type: http, scheme: bearer}
+  securitySchemes: {bearerAuth: {type: http,scheme: bearer}}
   parameters:
-    ProjectId: {name: projectId, in: path, required: true, schema: {type: string, format: uuid}}
-    TicketId: {name: ticketId, in: path, required: true, schema: {type: string, format: uuid}}
-    IfMatch: {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[1-9][0-9]*"$'}}
-    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 8, maxLength: 200}}
+    ProjectId: {name: projectId,in: path,required: true,schema: {type: string,format: uuid}}
+    TicketId: {name: ticketId,in: path,required: true,schema: {type: string,format: uuid}}
+    IfMatch: {name: If-Match,in: header,required: true,schema: {type: string,pattern: '^"[1-9][0-9]*"$'}}
+    IdempotencyKey: {name: Idempotency-Key,in: header,required: true,schema: {type: string,minLength: 8,maxLength: 200}}
+  requestBodies: {JSON: {required: true,content: {application/json: {schema: {type: object,additionalProperties: true}}}}}
   responses:
-    Error: {description: Error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    JSON: {description: JSON response,content: {application/json: {schema: {type: object,additionalProperties: true}}}}
+    Error: {description: Error,content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
   schemas:
-    TicketStatus: {type: string, enum: [new, needs_clarification, in_progress, review, rework, done, deleted]}
-    Role: {type: string, enum: [owner, admin, triager, reporter, agent]}
-    Me: {type: object, required: [principal, projects], properties: {principal: {type: object, additionalProperties: true}, projects: {type: array, items: {$ref: '#/components/schemas/ProjectMembership'}}}}
-    ProjectMembership: {type: object, required: [tenantId, projectId, projectKey, name, role], properties: {tenantId: {type: string, format: uuid}, projectId: {type: string, format: uuid}, projectKey: {type: string}, name: {type: string}, role: {$ref: '#/components/schemas/Role'}}}
-    Page: {type: object, required: [urlPath, title], properties: {urlPath: {type: string, pattern: '^/'}, urlPattern: {type: string}, title: {type: string, maxLength: 500}}}
-    Rect: {type: object, required: [x,y,w,h], properties: {x: {type: number, minimum: 0, maximum: 1}, y: {type: number, minimum: 0, maximum: 1}, w: {type: number, minimum: 0, maximum: 1}, h: {type: number, minimum: 0, maximum: 1}}}
-    Anchor: {type: object, properties: {cssSegments: {type: array, items: {type: string}}, xpath: {type: string}, beforeText: {type: string}, insideText: {type: string}, afterText: {type: string}, tag: {type: string}, role: {type: string}, aria: {type: string}, fingerprint: {type: string}, rect: {$ref: '#/components/schemas/Rect'}}}
-    CreateTicket: {type: object, required: [text, priority, page], properties: {text: {type: string, minLength: 1, maxLength: 4000}, priority: {type: integer, minimum: 1, maximum: 5}, dueDate: {type: [string, 'null'], format: date}, page: {$ref: '#/components/schemas/Page'}, anchor: {$ref: '#/components/schemas/Anchor'}, selection: {$ref: '#/components/schemas/Rect'}, context: {type: object, additionalProperties: true}}}
-    UpdateTicket: {type: object, properties: {text: {type: string, minLength: 1, maxLength: 4000}, priority: {type: integer, minimum: 1, maximum: 5}, dueDate: {type: [string, 'null'], format: date}, specification: {type: string, maxLength: 20000}}}
-    TransitionRequest: {type: object, required: [to], properties: {to: {$ref: '#/components/schemas/TicketStatus'}, agentComment: {type: string}, workLog: {type: string}, userComment: {type: string}}}
-    BulkRequest: {type: object, required: [ticketIds, action], properties: {ticketIds: {type: array, minItems: 1, maxItems: 200, uniqueItems: true, items: {type: string, format: uuid}}, action: {type: string, enum: [set_due_date, set_priority, delete]}, dueDate: {type: [string, 'null'], format: date}, priority: {type: integer, minimum: 1, maximum: 5}}}
-    Ticket: {allOf: [{$ref: '#/components/schemas/CreateTicket'}, {type: object, required: [id, tenantId, projectId, status, version, createdAt, updatedAt], properties: {id: {type: string, format: uuid}, tenantId: {type: string, format: uuid}, projectId: {type: string, format: uuid}, status: {$ref: '#/components/schemas/TicketStatus'}, version: {type: integer, minimum: 1}, specification: {type: string}, permissions: {type: array, items: {type: string}}, createdAt: {type: string, format: date-time}, updatedAt: {type: string, format: date-time}}}]}
-    Error: {type: object, required: [code, message, requestId], properties: {code: {type: string}, message: {type: string}, requestId: {type: string}, details: {type: object, additionalProperties: true}}}
+    TicketStatus: {type: string,enum: [new,needs_clarification,in_progress,review,rework,done,deleted]}
+    Page: {type: object,required: [urlPath,title],properties: {urlPath: {type: string,pattern: '^/'},urlPattern: {type: string},title: {type: string,maxLength: 500}}}
+    Rect: {type: object,required: [x,y,w,h],properties: {x: {type: number,minimum: 0,maximum: 1},y: {type: number,minimum: 0,maximum: 1},w: {type: number,minimum: 0,maximum: 1},h: {type: number,minimum: 0,maximum: 1}}}
+    Anchor: {type: object,properties: {cssSegments: {type: array,items: {type: string}},xpath: {type: string},beforeText: {type: string},insideText: {type: string},afterText: {type: string},tag: {type: string},role: {type: string},aria: {type: string},fingerprint: {type: string},rect: {$ref: '#/components/schemas/Rect'}}}
+    CreateTicket: {type: object,required: [text,priority,page],properties: {text: {type: string,minLength: 1,maxLength: 4000},priority: {type: integer,minimum: 1,maximum: 5},dueDate: {type: [string,'null'],format: date},page: {$ref: '#/components/schemas/Page'},anchor: {$ref: '#/components/schemas/Anchor'},selection: {$ref: '#/components/schemas/Rect'},context: {type: object,additionalProperties: true}}}
+    UpdateTicket: {type: object,properties: {text: {type: string,minLength: 1,maxLength: 4000},specification: {type: string,maxLength: 20000},priority: {type: integer,minimum: 1,maximum: 5},dueDate: {type: [string,'null'],format: date},status: {$ref: '#/components/schemas/TicketStatus'}}}
+    Ticket: {allOf: [{$ref: '#/components/schemas/CreateTicket'},{type: object,required: [id,status,version,createdAt,updatedAt],properties: {id: {type: string,format: uuid},status: {$ref: '#/components/schemas/TicketStatus'},version: {type: integer},specification: {type: string},createdAt: {type: string,format: date-time},updatedAt: {type: string,format: date-time}}}]}
+    TicketDetail: {allOf: [{$ref: '#/components/schemas/Ticket'},{type: object,required: [events,attachments,permissions],properties: {events: {type: array,items: {type: object,additionalProperties: true}},attachments: {type: array,items: {type: object,additionalProperties: true}},batch: {type: [object,'null'],additionalProperties: true},permissions: {type: array,items: {type: string}}}}]}
+    Error: {type: object,required: [code,message,requestId],properties: {code: {type: string},message: {type: string},requestId: {type: string},details: {type: object,additionalProperties: true}}}

@@ -20,17 +20,19 @@ type TicketInput struct {
 	TicketID string `json:"ticketId"`
 }
 type ClaimInput struct {
-	TicketIDs []string `json:"ticketIds"`
+	TicketIDs      []string `json:"ticketIds"`
+	IdempotencyKey string   `json:"idempotencyKey"`
 }
 type CommentInput struct {
 	TicketID string `json:"ticketId"`
 	Body     string `json:"body"`
 }
 type SubmitInput struct {
-	TicketID     string `json:"ticketId"`
-	AgentComment string `json:"agentComment"`
-	WorkLog      string `json:"workLog"`
-	Version      int64  `json:"version"`
+	TicketID       string `json:"ticketId"`
+	AgentComment   string `json:"agentComment"`
+	WorkLog        string `json:"workLog"`
+	IdempotencyKey string `json:"idempotencyKey"`
+	Version        int64  `json:"version"`
 }
 type Output struct {
 	Result any `json:"result"`
@@ -51,7 +53,7 @@ func New(service *backlog.Service) *mcp.Server {
 		if err != nil {
 			return result(nil, err)
 		}
-		ticket, err := service.Get(ctx, principal.TenantID, principal.ProjectID, input.TicketID)
+		ticket, err := service.Detail(ctx, principal.TenantID, principal.ProjectID, input.TicketID, actor(principal))
 		return result(ticket, err)
 	})
 	mcp.AddTool(s, &mcp.Tool{Name: "backlog_claim_batch", Description: "Atomically claim a coherent ticket batch"}, func(ctx context.Context, _ *mcp.CallToolRequest, input ClaimInput) (*mcp.CallToolResult, Output, error) {
@@ -59,7 +61,7 @@ func New(service *backlog.Service) *mcp.Server {
 		if err != nil {
 			return result(nil, err)
 		}
-		id, err := service.Claim(ctx, principal.TenantID, principal.ProjectID, input.TicketIDs, actor(principal))
+		id, err := service.Claim(ctx, principal.TenantID, principal.ProjectID, principal.Kind+":"+principal.ID, input.IdempotencyKey, input.TicketIDs, actor(principal))
 		return result(map[string]string{"batchId": id}, err)
 	})
 	mcp.AddTool(s, &mcp.Tool{Name: "backlog_add_comment", Description: "Add a durable ticket comment"}, func(ctx context.Context, _ *mcp.CallToolRequest, input CommentInput) (*mcp.CallToolResult, Output, error) {
@@ -79,15 +81,22 @@ func New(service *backlog.Service) *mcp.Server {
 		if err != nil {
 			return result(nil, err)
 		}
-		ticket, err := service.Transition(ctx, principal.TenantID, principal.ProjectID, input.TicketID, input.Version, actor(principal), backlog.TransitionInput{To: backlog.Review, AgentComment: input.AgentComment, WorkLog: input.WorkLog})
+		if input.IdempotencyKey == "" {
+			return result(nil, fmt.Errorf("idempotencyKey required"))
+		}
+		ticket, err := service.Transition(ctx, principal.TenantID, principal.ProjectID, input.TicketID, input.Version, principal.Kind+":"+principal.ID, input.IdempotencyKey, actor(principal), backlog.TransitionInput{To: backlog.Review, AgentComment: input.AgentComment, WorkLog: input.WorkLog})
 		return result(ticket, err)
 	})
-	s.AddResource(&mcp.Resource{URI: "backlog://project/workflow", Name: "Backlog workflow", MIMEType: "text/markdown"}, func(ctx context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	s.AddResource(&mcp.Resource{URI: "backlog://project/{projectId}/workflow", Name: "Backlog workflow", MIMEType: "text/markdown"}, func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		principal, err := required(ctx, "tickets:read")
 		if err != nil {
 			return nil, err
 		}
-		return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: fmt.Sprintf("backlog://project/%s/workflow", principal.ProjectID), MIMEType: "text/markdown", Text: "Read rework first, then priority and deadline. Claim atomically. Verify real changes. Submit agentComment and durable workLog. Only an administrator can accept or return work."}}}, nil
+		expected := fmt.Sprintf("backlog://project/%s/workflow", principal.ProjectID)
+		if request.Params == nil || request.Params.URI != expected {
+			return nil, fmt.Errorf("resource not found")
+		}
+		return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: expected, MIMEType: "text/markdown", Text: "Read rework first, then priority and deadline. Read full event history and prior feedback. Claim atomically. Verify real changes. Submit agentComment and durable workLog. Only an administrator can accept or return work."}}}, nil
 	})
 	return s
 }

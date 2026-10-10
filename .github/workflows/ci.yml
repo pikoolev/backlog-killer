@@ -1,20 +1,10 @@
 name: ci
-on:
-  push:
-  pull_request:
-permissions:
-  contents: read
+on: [push, pull_request]
+permissions: {contents: read}
 jobs:
   verify:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17.5-alpine
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -24,9 +14,45 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '22', cache: pnpm}
       - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: docker compose config --quiet
+      - run: docker compose up --build -d
+      - run: docker compose ps
       - run: go test -race ./...
-      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        env:
+          TEST_DATABASE_URL: postgres://backlog_runtime:local-runtime-password@127.0.0.1:55432/backlog_killer?sslmode=disable
       - run: go vet ./...
-      - run: pnpm lint && pnpm typecheck && pnpm test && pnpm build
+      - run: pnpm check:generated && pnpm lint && pnpm typecheck && pnpm test && pnpm build
+      - run: pnpm exec playwright test
+      - name: Verify restart readiness
+        run: docker compose restart api && timeout 60 sh -c 'until curl --fail --silent http://127.0.0.1:18080/readyz; do sleep 1; done'
+      - name: Verify on-prem bootstrap profile
+        env:
+          DEPLOYMENT_MODE: onprem
+          LOCAL_DEMO_SEED: "false"
+          ONPREM_TENANT_NAME: CI Tenant
+          ONPREM_PROJECT_NAME: CI Project
+          ONPREM_PROJECT_KEY: ci-project
+          ONPREM_OWNER_SUBJECT: ci-owner
+          ONPREM_OWNER_EMAIL: ci-owner@example.test
+          ONPREM_PROJECT_ORIGIN: https://product.example.test
+        run: docker compose up -d api && timeout 60 sh -c 'until curl --fail --silent http://127.0.0.1:18080/readyz; do sleep 1; done'
       - run: pnpm audit --prod --audit-level=high
-      - run: pnpm check:generated
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: Validate production profile
+        env:
+          API_PUBLIC_HOST: api.example.test
+          WEB_PUBLIC_HOST: backlog.example.test
+          OIDC_PUBLIC_HOST: identity.example.test
+          POSTGRES_MIGRATION_USER: backlog_migrator
+          POSTGRES_MIGRATION_PASSWORD: ci-migration-secret
+          KEYCLOAK_ADMIN_PASSWORD: ci-keycloak-secret
+          POSTGRES_PASSWORD: ci-runtime-secret
+          KEYCLOAK_ADMIN_USERNAME: admin
+          DEPLOYMENT_MODE: saas
+          EMBED_SIGNING_KEY: 0123456789abcdef0123456789abcdef
+        run: docker compose -f docker-compose.yml -f compose.production.yml config --quiet
+      - if: always()
+        run: docker compose logs --no-color api web demo keycloak postgres
+      - if: always()
+        run: docker compose down -v

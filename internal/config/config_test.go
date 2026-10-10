@@ -29,6 +29,22 @@ func TestLoadRejectsUnsupportedStorage(t *testing.T) {
 	}
 }
 
+func TestProductionRejectsDemoSeedAndHTTP(t *testing.T) {
+	validEnvironment(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("LOCAL_DEMO_SEED", "true")
+	if _, err := Load(); err == nil {
+		t.Fatal("production accepted demo seed")
+	}
+	validEnvironment(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("LOCAL_DEMO_SEED", "false")
+	t.Setenv("API_PUBLIC_URL", "http://api.example")
+	if _, err := Load(); err == nil {
+		t.Fatal("production accepted HTTP public URLs")
+	}
+}
+
 func TestOnPremRequiresBootstrapIdentity(t *testing.T) {
 	validEnvironment(t)
 	t.Setenv("DEPLOYMENT_MODE", "onprem")

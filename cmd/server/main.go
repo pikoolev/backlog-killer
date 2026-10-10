@@ -25,6 +25,7 @@ import (
 	"github.com/pikoolev/backlog-killer/internal/auth"
 	"github.com/pikoolev/backlog-killer/internal/backlog"
 	"github.com/pikoolev/backlog-killer/internal/config"
+	"github.com/pikoolev/backlog-killer/internal/httpops"
 	mcpserver "github.com/pikoolev/backlog-killer/internal/mcp"
 	"github.com/pikoolev/backlog-killer/internal/projects"
 	"github.com/pikoolev/backlog-killer/internal/store"
@@ -35,6 +36,7 @@ type api struct {
 	attachments                                        *attachments.Service
 	invitations                                        *projects.Invitations
 	tokens                                             *projects.Tokens
+	admin                                              *projects.Admin
 	flows                                              *auth.Flows
 	embedIssuer                                        auth.EmbedIssuer
 	webPublicURL, oidcPublicIssuer, oidcInternalIssuer string
@@ -98,10 +100,43 @@ func main() {
 	defer pool.Close()
 	service := &backlog.Service{DB: pool}
 	authentication := auth.New(pool, cfg.OIDCIssuer, cfg.OIDCPublicIssuer, cfg.APIPublicURL, cfg.OIDCAudience, cfg.EmbedSigningKey)
-	application := &api{service: service, attachments: &attachments.Service{DB: pool, Root: cfg.StoragePath}, invitations: &projects.Invitations{DB: pool}, tokens: &projects.Tokens{DB: pool}, flows: &auth.Flows{DB: pool}, embedIssuer: auth.EmbedIssuer{Key: []byte(cfg.EmbedSigningKey), Issuer: cfg.APIPublicURL, Audience: cfg.OIDCAudience}, webPublicURL: cfg.WebPublicURL, oidcPublicIssuer: cfg.OIDCPublicIssuer, oidcInternalIssuer: cfg.OIDCIssuer, oidcClientID: cfg.OIDCClientID, oidcClientSecret: cfg.OIDCClientSecret, authenticator: authentication}
+	application := &api{service: service, attachments: &attachments.Service{DB: pool, Root: cfg.StoragePath}, invitations: &projects.Invitations{DB: pool}, tokens: &projects.Tokens{DB: pool}, admin: &projects.Admin{DB: pool}, flows: &auth.Flows{DB: pool}, embedIssuer: auth.EmbedIssuer{Key: []byte(cfg.EmbedSigningKey), Issuer: cfg.APIPublicURL, Audience: cfg.OIDCAudience}, webPublicURL: cfg.WebPublicURL, oidcPublicIssuer: cfg.OIDCPublicIssuer, oidcInternalIssuer: cfg.OIDCIssuer, oidcClientID: cfg.OIDCClientID, oidcClientSecret: cfg.OIDCClientSecret, authenticator: authentication}
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_ = application.attachments.Cleanup(context.Background())
+				_, _ = pool.Exec(context.Background(), `DELETE FROM embed_auth_flows WHERE expires_at<now()-interval '1 hour'; DELETE FROM idempotency_keys WHERE created_at<now()-interval '7 days'; DELETE FROM invitations WHERE expires_at<now()-interval '30 days'`)
+			}
+		}
+	}()
 	router := chi.NewRouter()
-	router.Use(middleware.RequestID, middleware.Recoverer, middleware.Timeout(30*time.Second), securityHeaders, authentication.Middleware)
-	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { jsonResponse(w, 200, map[string]string{"status": "ok"}) })
+	limiter, metrics := httpops.NewLimiter(), &httpops.Metrics{}
+	router.Use(application.dashboardCors, middleware.RequestID, middleware.Recoverer, middleware.Timeout(30*time.Second), metrics.Middleware, limiter.Middleware, securityHeaders, authentication.Middleware)
+	router.Get("/livez", func(w http.ResponseWriter, _ *http.Request) { jsonResponse(w, 200, map[string]string{"status": "ok"}) })
+	router.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		if err := pool.Ping(r.Context()); err != nil {
+			writeError(w, r, err)
+			return
+		}
+		jsonResponse(w, 200, map[string]string{"status": "ok"})
+	})
+	router.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if err := pool.Ping(r.Context()); err != nil {
+			writeError(w, r, err)
+			return
+		}
+		if err := attachments.ValidateStorage(cfg.StoragePath); err != nil {
+			writeError(w, r, err)
+			return
+		}
+		jsonResponse(w, 200, map[string]string{"status": "ready"})
+	})
+	router.Handle("/metrics", metrics)
 	router.Get("/embed/auth/start", application.embedStart)
 	router.Get("/embed/auth/callback", application.embedCallback)
 	router.Route("/v1", func(r chi.Router) {
@@ -109,6 +144,8 @@ func main() {
 		r.Post("/invitations/accept", application.acceptInvitation)
 		r.Post("/embed/token", application.embedToken)
 		r.Options("/embed/token", application.embedTokenPreflight)
+		r.Post("/tenants", application.createTenant)
+		r.Post("/projects", application.createProject)
 		r.Route("/projects/{projectId}", func(r chi.Router) {
 			r.Use(application.projectIdentity)
 			r.Use(application.cors)
@@ -116,13 +153,25 @@ func main() {
 			r.Get("/tickets", application.list)
 			r.Post("/tickets", application.create)
 			r.Post("/tickets/{ticketId}/comments", application.comment)
+			r.Patch("/tickets/{ticketId}", application.update)
+			r.Delete("/tickets/{ticketId}", application.deleteTicket)
+			r.Post("/tickets/{ticketId}/restore", application.restoreTicket)
 			r.Post("/tickets/bulk", application.bulk)
+			r.Delete("/attachments/{attachmentId}", application.deleteAttachment)
 			r.Post("/tickets/{ticketId}/attachments", application.uploadAttachment)
 			r.Get("/attachments/{attachmentId}", application.downloadAttachment)
 			r.Get("/tickets/{ticketId}", application.get)
 			r.Post("/tickets/{ticketId}/transition", application.transition)
 			r.Post("/agent-batches", application.claim)
+			r.Get("/agent-batches", application.listBatches)
+			r.Delete("/agent-batches/{batchId}", application.unassignBatch)
 			r.Post("/invitations", application.createInvitation)
+			r.Get("/source", application.projectSource)
+			r.Get("/settings", application.projectSettings)
+			r.Post("/origins", application.addOrigin)
+			r.Delete("/origins", application.removeOrigin)
+			r.Patch("/members/{userId}", application.updateMember)
+			r.Delete("/members/{userId}", application.removeMember)
 			r.Post("/agent-tokens", application.createAgentToken)
 			r.Get("/agent-tokens", application.listAgentTokens)
 			r.Delete("/agent-tokens/{tokenId}", application.revokeAgentToken)
@@ -236,6 +285,116 @@ func (a *api) embedToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", origin)
 	w.Header().Set("Vary", "Origin")
 	jsonResponse(w, 200, map[string]any{"accessToken": token, "expiresIn": 300, "projectId": project})
+}
+
+func (a *api) createProject(w http.ResponseWriter, r *http.Request) {
+	p, ok := auth.FromContext(r.Context())
+	if !ok || p.Kind == "agent" {
+		writeError(w, r, &backlog.Error{Code: "unauthorized", Status: 401, Message: "authentication required"})
+		return
+	}
+	var in struct{ TenantID, Name, ProjectKey string }
+	if err := decode(r, &in); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	project, err := a.admin.CreateProjectForOwner(r.Context(), p.Issuer, p.Subject, in.TenantID, in.Name, in.ProjectKey)
+	if err != nil {
+		writeError(w, r, &backlog.Error{Code: "invalid_project", Status: 400, Message: err.Error()})
+		return
+	}
+	jsonResponse(w, 201, project)
+}
+
+func (a *api) createTenant(w http.ResponseWriter, r *http.Request) {
+	p, ok := auth.FromContext(r.Context())
+	if !ok || p.Kind == "agent" {
+		writeError(w, r, &backlog.Error{Code: "unauthorized", Status: 401, Message: "authentication required"})
+		return
+	}
+	var in struct{ Name, ProjectName, ProjectKey string }
+	if err := decode(r, &in); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	project, err := a.admin.CreateTenant(r.Context(), p.Issuer, p.Subject, p.Email, in.Name, in.ProjectName, in.ProjectKey)
+	if err != nil {
+		writeError(w, r, &backlog.Error{Code: "invalid_tenant", Status: 400, Message: err.Error()})
+		return
+	}
+	jsonResponse(w, 201, project)
+}
+func (a *api) projectSettings(w http.ResponseWriter, r *http.Request) {
+	p, ok := requireAdmin(r)
+	if !ok {
+		writeError(w, r, &backlog.Error{Code: "forbidden", Status: 403, Message: "admin role required"})
+		return
+	}
+	project, err := a.admin.Get(r.Context(), p.TenantID, p.ProjectID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	project.Role = p.Role
+	jsonResponse(w, 200, project)
+}
+func (a *api) addOrigin(w http.ResponseWriter, r *http.Request) {
+	p, ok := requireAdmin(r)
+	if !ok {
+		writeError(w, r, &backlog.Error{Code: "forbidden", Status: 403, Message: "admin role required"})
+		return
+	}
+	var in struct{ Origin string }
+	if err := decode(r, &in); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if err := a.admin.AddOrigin(r.Context(), p.TenantID, p.ProjectID, in.Origin); err != nil {
+		writeError(w, r, &backlog.Error{Code: "invalid_origin", Status: 400, Message: err.Error()})
+		return
+	}
+	jsonResponse(w, 201, in)
+}
+func (a *api) removeOrigin(w http.ResponseWriter, r *http.Request) {
+	p, ok := requireAdmin(r)
+	if !ok {
+		writeError(w, r, &backlog.Error{Code: "forbidden", Status: 403, Message: "admin role required"})
+		return
+	}
+	if err := a.admin.RemoveOrigin(r.Context(), p.TenantID, p.ProjectID, r.URL.Query().Get("origin")); err != nil {
+		writeError(w, r, backlog.ErrNotFound)
+		return
+	}
+	w.WriteHeader(204)
+}
+func (a *api) updateMember(w http.ResponseWriter, r *http.Request) {
+	p, ok := requireAdmin(r)
+	if !ok {
+		writeError(w, r, &backlog.Error{Code: "forbidden", Status: 403, Message: "admin role required"})
+		return
+	}
+	var in struct{ Role string }
+	if err := decode(r, &in); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if err := a.admin.SetMemberRole(r.Context(), p.TenantID, p.ProjectID, chi.URLParam(r, "userId"), in.Role); err != nil {
+		writeError(w, r, &backlog.Error{Code: "invalid_member", Status: 400, Message: err.Error()})
+		return
+	}
+	w.WriteHeader(204)
+}
+func (a *api) removeMember(w http.ResponseWriter, r *http.Request) {
+	p, ok := requireAdmin(r)
+	if !ok {
+		writeError(w, r, &backlog.Error{Code: "forbidden", Status: 403, Message: "admin role required"})
+		return
+	}
+	if err := a.admin.RemoveMember(r.Context(), p.TenantID, p.ProjectID, chi.URLParam(r, "userId")); err != nil {
+		writeError(w, r, &backlog.Error{Code: "invalid_member", Status: 400, Message: err.Error()})
+		return
+	}
+	w.WriteHeader(204)
 }
 
 func requireAdmin(r *http.Request) (auth.Principal, bool) {
@@ -371,17 +530,43 @@ func (a *api) list(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, backlog.ErrNotFound)
 		return
 	}
+	allowed := map[string]bool{"status": true, "page": true, "cursor": true, "limit": true}
+	for key := range r.URL.Query() {
+		if !allowed[key] {
+			writeError(w, r, &backlog.Error{Code: "unknown_filter", Status: 400, Message: "unsupported ticket filter"})
+			return
+		}
+	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	var statuses []backlog.Status
+	valid := map[backlog.Status]bool{backlog.New: true, backlog.Clarification: true, backlog.InProgress: true, backlog.Review: true, backlog.Rework: true, backlog.Done: true, backlog.Deleted: true}
 	for _, raw := range r.URL.Query()["status"] {
-		statuses = append(statuses, backlog.Status(raw))
+		status := backlog.Status(raw)
+		if !valid[status] {
+			writeError(w, r, &backlog.Error{Code: "invalid_filter", Status: 400, Message: "invalid status filter"})
+			return
+		}
+		statuses = append(statuses, status)
 	}
-	items, err := a.service.List(r.Context(), p.TenantID, project, statuses, limit)
+	var cursor time.Time
+	if raw := r.URL.Query().Get("cursor"); raw != "" {
+		var err error
+		cursor, err = time.Parse(time.RFC3339Nano, raw)
+		if err != nil {
+			writeError(w, r, &backlog.Error{Code: "invalid_cursor", Status: 400, Message: "invalid cursor"})
+			return
+		}
+	}
+	items, next, err := a.service.ListFiltered(r.Context(), p.TenantID, project, statuses, r.URL.Query().Get("page"), limit, cursor)
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
-	jsonResponse(w, 200, map[string]any{"items": items, "nextCursor": nil})
+	var nextCursor any
+	if next != nil {
+		nextCursor = next.Format(time.RFC3339Nano)
+	}
+	jsonResponse(w, 200, map[string]any{"items": items, "nextCursor": nextCursor})
 }
 func (a *api) create(w http.ResponseWriter, r *http.Request) {
 	p, ok := authorize(r, "tickets:comment")
@@ -405,6 +590,56 @@ func (a *api) create(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("ETag", fmt.Sprintf("\"%d\"", ticket.Version))
 	jsonResponse(w, 201, ticket)
+}
+func (a *api) deleteAttachment(w http.ResponseWriter, r *http.Request) {
+	p, ok := authorize(r, "")
+	if !ok || (p.Role != "owner" && p.Role != "admin" && p.Role != "triager") {
+		writeError(w, r, &backlog.Error{Code: "forbidden", Status: 403, Message: "delete attachment not allowed"})
+		return
+	}
+	if err := a.attachments.Delete(r.Context(), p.TenantID, chi.URLParam(r, "projectId"), chi.URLParam(r, "attachmentId")); err != nil {
+		writeError(w, r, backlog.ErrNotFound)
+		return
+	}
+	w.WriteHeader(204)
+}
+func (a *api) listBatches(w http.ResponseWriter, r *http.Request) {
+	p, ok := requireAdmin(r)
+	if !ok {
+		writeError(w, r, &backlog.Error{Code: "forbidden", Status: 403, Message: "admin role required"})
+		return
+	}
+	items, err := a.service.ListBatches(r.Context(), p.TenantID, p.ProjectID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	jsonResponse(w, 200, map[string]any{"items": items})
+}
+func (a *api) unassignBatch(w http.ResponseWriter, r *http.Request) {
+	p, ok := requireAdmin(r)
+	if !ok {
+		writeError(w, r, &backlog.Error{Code: "forbidden", Status: 403, Message: "admin role required"})
+		return
+	}
+	if err := a.service.UnassignBatch(r.Context(), p.TenantID, p.ProjectID, chi.URLParam(r, "batchId")); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	w.WriteHeader(204)
+}
+func (a *api) projectSource(w http.ResponseWriter, r *http.Request) {
+	p, ok := authorize(r, "tickets:read")
+	if !ok {
+		writeError(w, r, &backlog.Error{Code: "unauthorized", Status: 401, Message: "authentication required"})
+		return
+	}
+	settings, err := a.admin.Get(r.Context(), p.TenantID, p.ProjectID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	jsonResponse(w, 200, map[string]any{"projectId": settings.ID, "projectKey": settings.Key, "origins": settings.Origins})
 }
 func (a *api) comment(w http.ResponseWriter, r *http.Request) {
 	p, ok := authorize(r, "tickets:comment")
@@ -447,7 +682,7 @@ func (a *api) bulk(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	if err := a.service.Bulk(r.Context(), p.TenantID, chi.URLParam(r, "projectId"), actor(p), input); err != nil {
+	if err := a.service.Bulk(r.Context(), p.TenantID, chi.URLParam(r, "projectId"), p.Kind+":"+p.ID, r.Header.Get("Idempotency-Key"), actor(p), input); err != nil {
 		writeError(w, r, err)
 		return
 	}
@@ -505,7 +740,57 @@ func (a *api) get(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, backlog.ErrNotFound)
 		return
 	}
-	ticket, err := a.service.Get(r.Context(), p.TenantID, project, chi.URLParam(r, "ticketId"))
+	detail, err := a.service.Detail(r.Context(), p.TenantID, project, chi.URLParam(r, "ticketId"), actor(p))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	w.Header().Set("ETag", fmt.Sprintf("\"%d\"", detail.Version))
+	jsonResponse(w, 200, detail)
+}
+func (a *api) update(w http.ResponseWriter, r *http.Request) {
+	p, ok := authorize(r, "")
+	if !ok {
+		writeError(w, r, &backlog.Error{Code: "forbidden", Status: 403, Message: "update not allowed"})
+		return
+	}
+	version, err := backlog.ParseVersion(r.Header.Get("If-Match"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	var input backlog.UpdateInput
+	if err = decode(r, &input); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	ticket, err := a.service.Update(r.Context(), p.TenantID, chi.URLParam(r, "projectId"), chi.URLParam(r, "ticketId"), version, actor(p), input)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	w.Header().Set("ETag", fmt.Sprintf("\"%d\"", ticket.Version))
+	jsonResponse(w, 200, ticket)
+}
+func (a *api) deleteTicket(w http.ResponseWriter, r *http.Request)  { a.deleted(w, r, false) }
+func (a *api) restoreTicket(w http.ResponseWriter, r *http.Request) { a.deleted(w, r, true) }
+func (a *api) deleted(w http.ResponseWriter, r *http.Request, restore bool) {
+	p, ok := authorize(r, "")
+	if !ok {
+		writeError(w, r, &backlog.Error{Code: "forbidden", Status: 403, Message: "operation not allowed"})
+		return
+	}
+	version, err := backlog.ParseVersion(r.Header.Get("If-Match"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	var ticket backlog.Ticket
+	if restore {
+		ticket, err = a.service.Restore(r.Context(), p.TenantID, chi.URLParam(r, "projectId"), chi.URLParam(r, "ticketId"), version, actor(p))
+	} else {
+		ticket, err = a.service.Delete(r.Context(), p.TenantID, chi.URLParam(r, "projectId"), chi.URLParam(r, "ticketId"), version, actor(p))
+	}
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -529,7 +814,12 @@ func (a *api) transition(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	ticket, err := a.service.Transition(r.Context(), p.TenantID, chi.URLParam(r, "projectId"), chi.URLParam(r, "ticketId"), version, actor(p), input)
+	key := r.Header.Get("Idempotency-Key")
+	if p.Kind == "agent" && key == "" {
+		writeError(w, r, &backlog.Error{Code: "idempotency_key_required", Status: 400, Message: "Idempotency-Key required"})
+		return
+	}
+	ticket, err := a.service.Transition(r.Context(), p.TenantID, chi.URLParam(r, "projectId"), chi.URLParam(r, "ticketId"), version, p.Kind+":"+p.ID, key, actor(p), input)
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -554,7 +844,7 @@ func (a *api) claim(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	id, err := a.service.Claim(r.Context(), p.TenantID, chi.URLParam(r, "projectId"), input.TicketIDs, actor(p))
+	id, err := a.service.Claim(r.Context(), p.TenantID, chi.URLParam(r, "projectId"), p.Kind+":"+p.ID, r.Header.Get("Idempotency-Key"), input.TicketIDs, actor(p))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -585,6 +875,23 @@ func (a *api) projectIdentity(next http.Handler) http.Handler {
 		}
 		principal.ID, principal.TenantID, principal.ProjectID, principal.Role = userID, tenantID, resolvedProjectID, role
 		next.ServeHTTP(w, r.WithContext(auth.WithPrincipal(r.Context(), principal)))
+	})
+}
+
+func (a *api) dashboardCors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin == a.webPublicURL {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Add("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,Idempotency-Key,If-Match")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(204)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 
