@@ -8,31 +8,31 @@ Requirements: Docker Desktop, Go 1.25+, Node 22+, pnpm 10.2.
 
 ```sh
 cp .env.example .env
-# Replace every change-me value and EMBED_SIGNING_KEY. Local Compose explicitly
-# enables LOCAL_DEMO_SEED; never enable it in a deployed environment.
+# Replace local passwords and signing key, then:
 docker compose up --build -d
 docker compose ps
 ```
 
-URLs:
+Local domains:
 
-- Dashboard: `http://127.0.0.1:4173`
-- SDK demo: `http://127.0.0.1:4174`
-- API/MCP: `http://127.0.0.1:18080`, `/mcp`
-- Keycloak: `http://127.0.0.1:8081`
+- Client HTML + SDK: `http://client.localhost:4174`
+- Dashboard: `http://backlog.localhost:4173`
+- API/MCP: `http://api.localhost:18080`, `/mcp`
+- Keycloak: `http://identity.localhost:8081`
 
-Seed users are `owner`, `triager`, and `reporter` at `example.test`; local-only passwords are in `infra/keycloak/realm.json`. Change or remove them outside local development.
+Seed users are `owner`, `triager`, and `reporter` at `example.test`; local-only passwords are in `infra/keycloak/realm.local.json`. `owner` is also the local platform administrator who can manually create client tenants. See `docs/local-stack.md` for the end-to-end local workflow.
 
 ## SDK
 
+The dashboard image publishes the SDK bundle at `/sdk/backlog-killer.js`:
+
 ```html
-<script async src="https://dashboard.example/backlog-killer.js"
+<script async src="https://backlog.example.com/sdk/backlog-killer.js"
   data-project-key="public-project-key"
-  data-api-base="https://api.example"></script>
+  data-api-base="https://api.example.com"></script>
 ```
 
-`projectKey` is public. Browser authorization uses short-lived user tokens; never embed a PAT or project secret.
-
+Add the client's exact origin in Administration before loading the SDK. `projectKey` is public. Browser authorization uses short-lived user tokens; never embed a PAT or project secret.
 ## Commands
 
 ```sh
@@ -66,15 +66,16 @@ Local Compose is a development fixture. Production must use both files and expli
 
 ```sh
 export API_PUBLIC_HOST=api.example.com WEB_PUBLIC_HOST=backlog.example.com OIDC_PUBLIC_HOST=identity.example.com
-export DEPLOYMENT_MODE=saas POSTGRES_MIGRATION_USER=backlog_migrator POSTGRES_MIGRATION_PASSWORD='...'
-export POSTGRES_PASSWORD='...' KEYCLOAK_ADMIN_USERNAME=admin KEYCLOAK_ADMIN_PASSWORD='...' EMBED_SIGNING_KEY='...'
+export DEPLOYMENT_MODE=saas PLATFORM_ADMIN_SUBJECTS='production-owner-oidc-subject'
+export POSTGRES_MIGRATION_USER=backlog_migrator POSTGRES_MIGRATION_PASSWORD='...' POSTGRES_PASSWORD='...'
+export KEYCLOAK_DB_PASSWORD='...' KEYCLOAK_ADMIN_USERNAME=admin KEYCLOAK_ADMIN_PASSWORD='...' EMBED_SIGNING_KEY='...'
 docker compose -f docker-compose.yml -f compose.production.yml config
 docker compose -f docker-compose.yml -f compose.production.yml up -d
 ```
 
-The production overlay disables the demo site and seed, removes direct database/identity/API/web ports, gives Keycloak persistent PostgreSQL storage, and terminates TLS through Caddy. Startup rejects demo seed and HTTP public URLs when `APP_ENV=production`.
+The production overlay disables the demo site and seed, removes direct database/identity/API/web ports, gives Keycloak a separate persistent PostgreSQL database and a production realm without demo users, and terminates TLS through Caddy. Startup rejects demo seed and HTTP public URLs when `APP_ENV=production`.
 
-Runtime probes: `/livez`, `/healthz`, `/readyz`; Prometheus text metrics: `/metrics`. Back up PostgreSQL and attachments as one recovery point with `BACKUP_DIR=/secure/path ./scripts/backup.sh`.
+Runtime probes: `/livez`, `/healthz`, `/readyz`; Prometheus text metrics: `/metrics`. Back up application PostgreSQL and attachments as one recovery point with `BACKUP_DIR=/secure/path ./scripts/backup.sh`. Back up the separate Keycloak PostgreSQL volume with the VPS platform snapshot/backup policy.
 
 ## Release gate
 

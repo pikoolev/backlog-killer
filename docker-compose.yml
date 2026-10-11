@@ -22,8 +22,8 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-local-admin-password}
-    ports: ["127.0.0.1:8081:8080"]
-    volumes: ["./infra/keycloak:/opt/keycloak/data/import:ro"]
+    ports: ["127.0.0.1:${OIDC_PORT:-8081}:8080"]
+    volumes: ["./infra/keycloak/realm.local.json:/opt/keycloak/data/import/realm.json:ro"]
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000; printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3; grep -q UP <&3"]
       interval: 10s
@@ -40,16 +40,17 @@ services:
       DATABASE_URL: postgres://backlog_runtime:${POSTGRES_PASSWORD:-local-runtime-password}@postgres:5432/${POSTGRES_DB:-backlog_killer}?sslmode=disable
       MIGRATION_DATABASE_URL: postgres://${POSTGRES_MIGRATION_USER:-backlog_migrator}:${POSTGRES_MIGRATION_PASSWORD:-local-migrator-password}@postgres:5432/${POSTGRES_DB:-backlog_killer}?sslmode=disable
       OIDC_ISSUER: http://keycloak:8080/realms/backlog-killer
-      OIDC_PUBLIC_ISSUER: http://127.0.0.1:8081/realms/backlog-killer
+      OIDC_PUBLIC_ISSUER: ${OIDC_PUBLIC_URL:-http://identity.localhost:8081}/realms/backlog-killer
       OIDC_AUDIENCE: backlog-killer-api
       OIDC_CLIENT_ID: backlog-killer-web
       OIDC_CLIENT_SECRET: ""
-      API_PUBLIC_URL: http://127.0.0.1:18080
-      WEB_PUBLIC_URL: http://127.0.0.1:4173
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://api.localhost:18080}
+      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-http://backlog.localhost:4173}
       EMBED_SIGNING_KEY: ${EMBED_SIGNING_KEY:-local-only-signing-key-change-before-production}
       STORAGE_DRIVER: filesystem
       STORAGE_PATH: /data/uploads
-      MCP_ALLOWED_ORIGINS: http://127.0.0.1:4173
+      MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-http://backlog.localhost:4173}
+      PLATFORM_ADMIN_SUBJECTS: ${PLATFORM_ADMIN_SUBJECTS:-30000000-0000-4000-8000-000000000001}
       ONPREM_TENANT_NAME: ${ONPREM_TENANT_NAME:-}
       ONPREM_PROJECT_NAME: ${ONPREM_PROJECT_NAME:-}
       ONPREM_PROJECT_KEY: ${ONPREM_PROJECT_KEY:-}
@@ -70,8 +71,16 @@ services:
     build:
       context: .
       dockerfile: infra/web.Dockerfile
-      args: {APP: web}
-    ports: ["127.0.0.1:4173:80"]
+      args:
+        APP: web
+        VITE_API_URL: ${API_PUBLIC_URL:-http://api.localhost:18080}
+        VITE_OIDC_URL: ${OIDC_PUBLIC_URL:-http://identity.localhost:8081}
+        VITE_OIDC_REALM: ${OIDC_REALM:-backlog-killer}
+        VITE_OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-backlog-killer-web}
+    environment:
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://api.localhost:18080}
+      OIDC_PUBLIC_URL: ${OIDC_PUBLIC_URL:-http://identity.localhost:8081}
+    ports: ["127.0.0.1:${WEB_PORT:-4173}:80"]
     depends_on:
       api: {condition: service_healthy}
     healthcheck:
@@ -83,8 +92,14 @@ services:
     build:
       context: .
       dockerfile: infra/web.Dockerfile
-      args: {APP: demo}
-    ports: ["127.0.0.1:4174:80"]
+      args:
+        APP: demo
+        VITE_API_URL: ${API_PUBLIC_URL:-http://api.localhost:18080}
+        VITE_PROJECT_KEY: ${DEMO_PROJECT_KEY:-demo-project}
+    environment:
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://api.localhost:18080}
+      OIDC_PUBLIC_URL: ${OIDC_PUBLIC_URL:-http://identity.localhost:8081}
+    ports: ["127.0.0.1:${DEMO_PORT:-4174}:80"]
     depends_on:
       api: {condition: service_healthy}
     healthcheck:

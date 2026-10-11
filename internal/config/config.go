@@ -9,12 +9,13 @@ import (
 )
 
 type Config struct {
-	Mode, Environment, DatabaseURL, MigrationDatabaseURL, OIDCIssuer, OIDCPublicIssuer, OIDCAudience         string
-	OIDCClientID, OIDCClientSecret                                                                           string
-	APIPublicURL, WebPublicURL, EmbedSigningKey, StorageDriver, StoragePath                                  string
-	MCPAllowedOrigins                                                                                        []string
-	LocalDemoSeed                                                                                            bool
-	OnPremTenant, OnPremProject, OnPremProjectKey, OnPremOwnerSubject, OnPremOwnerEmail, OnPremProjectOrigin string
+	Mode, Environment, DatabaseURL, MigrationDatabaseURL, OIDCIssuer, OIDCPublicIssuer, OIDCAudience string
+	OIDCClientID, OIDCClientSecret                                                                   string
+	APIPublicURL, WebPublicURL, EmbedSigningKey, StorageDriver, StoragePath                          string
+	MCPAllowedOrigins, PlatformAdminSubjects                                                         []string
+	LocalDemoSeed                                                                                    bool
+	OnPremTenant, OnPremProject, OnPremProjectKey, OnPremOwnerSubject, OnPremOwnerEmail              string
+	OnPremProjectOrigin                                                                              string
 }
 
 func Load() (Config, error) {
@@ -22,7 +23,7 @@ func Load() (Config, error) {
 		Mode: env("DEPLOYMENT_MODE", "saas"), Environment: env("APP_ENV", "development"), DatabaseURL: os.Getenv("DATABASE_URL"), MigrationDatabaseURL: os.Getenv("MIGRATION_DATABASE_URL"),
 		OIDCIssuer: os.Getenv("OIDC_ISSUER"), OIDCPublicIssuer: os.Getenv("OIDC_PUBLIC_ISSUER"), OIDCAudience: os.Getenv("OIDC_AUDIENCE"), OIDCClientID: env("OIDC_CLIENT_ID", "backlog-killer-web"), OIDCClientSecret: os.Getenv("OIDC_CLIENT_SECRET"),
 		APIPublicURL: os.Getenv("API_PUBLIC_URL"), WebPublicURL: os.Getenv("WEB_PUBLIC_URL"), EmbedSigningKey: os.Getenv("EMBED_SIGNING_KEY"),
-		StorageDriver: env("STORAGE_DRIVER", "filesystem"), StoragePath: os.Getenv("STORAGE_PATH"), MCPAllowedOrigins: split(os.Getenv("MCP_ALLOWED_ORIGINS")),
+		StorageDriver: env("STORAGE_DRIVER", "filesystem"), StoragePath: os.Getenv("STORAGE_PATH"), MCPAllowedOrigins: split(os.Getenv("MCP_ALLOWED_ORIGINS")), PlatformAdminSubjects: split(os.Getenv("PLATFORM_ADMIN_SUBJECTS")),
 	}
 	c.OnPremTenant, c.OnPremProject, c.OnPremProjectKey = os.Getenv("ONPREM_TENANT_NAME"), os.Getenv("ONPREM_PROJECT_NAME"), os.Getenv("ONPREM_PROJECT_KEY")
 	c.OnPremOwnerSubject, c.OnPremOwnerEmail, c.OnPremProjectOrigin = os.Getenv("ONPREM_OWNER_SUBJECT"), os.Getenv("ONPREM_OWNER_EMAIL"), os.Getenv("ONPREM_PROJECT_ORIGIN")

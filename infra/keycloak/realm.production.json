@@ -1,0 +1,37 @@
+{
+  "realm": "backlog-killer",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "verifyEmail": true,
+  "bruteForceProtected": true,
+  "passwordPolicy": "length(12) and upperCase(1) and lowerCase(1) and digits(1)",
+  "clients": [
+    {
+      "clientId": "backlog-killer-web",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "https://${WEB_PUBLIC_HOST}/*",
+        "https://${API_PUBLIC_HOST}/embed/auth/callback*"
+      ],
+      "webOrigins": ["https://${WEB_PUBLIC_HOST}"],
+      "protocolMappers": [
+        {
+          "name": "audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "backlog-killer-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ]
+}

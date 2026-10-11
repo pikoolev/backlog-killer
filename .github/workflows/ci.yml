@@ -47,10 +47,12 @@ jobs:
           POSTGRES_MIGRATION_USER: backlog_migrator
           POSTGRES_MIGRATION_PASSWORD: ci-migration-secret
           KEYCLOAK_ADMIN_PASSWORD: ci-keycloak-secret
+          KEYCLOAK_DB_PASSWORD: ci-keycloak-db-secret
           POSTGRES_PASSWORD: ci-runtime-secret
           KEYCLOAK_ADMIN_USERNAME: admin
           DEPLOYMENT_MODE: saas
           EMBED_SIGNING_KEY: 0123456789abcdef0123456789abcdef
+          PLATFORM_ADMIN_SUBJECTS: ci-owner-subject
         run: docker compose -f docker-compose.yml -f compose.production.yml config --quiet
       - if: always()
         run: docker compose logs --no-color api web demo keycloak postgres

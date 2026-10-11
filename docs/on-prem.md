@@ -10,15 +10,16 @@ Set `ONPREM_TENANT_NAME`, `ONPREM_PROJECT_NAME`, `ONPREM_PROJECT_KEY`, `ONPREM_P
 
 ## Production requirements
 
-- Terminate TLS at a trusted reverse proxy. Expose PostgreSQL and Keycloak administration only on private networks.
-- Use PostgreSQL 17 with separate migration-owner and runtime credentials. Startup rejects a runtime role that is superuser, has `BYPASSRLS`, or owns application tables.
+- Terminate TLS at a trusted reverse proxy. Expose both PostgreSQL services and Keycloak administration only on private networks.
+- Use PostgreSQL 17 with separate application migration-owner/runtime credentials. Keycloak uses its own `keycloak-postgres` service and `KEYCLOAK_DB_PASSWORD`; do not reuse the application schema owner.
 - Configure exact public API, web, OIDC, MCP, and project origins. Wildcards, paths on origins, query strings, protocol-relative URLs, and `null` origins fail startup.
+- Set `PLATFORM_ADMIN_SUBJECTS` to the comma-separated OIDC `sub` values allowed to create client tenants manually.
 - Use `STORAGE_DRIVER=filesystem` and a private persistent path outside the web root. Startup probes writability; blobs are random-keyed and mode `0600`.
-- Back up PostgreSQL and the attachment directory as one recovery point. Database rows without their matching blob snapshot are incomplete.
+- Back up application PostgreSQL and the attachment directory as one recovery point. Back up the Keycloak database independently; losing it removes login identities even when application data survives.
 - Rotate OIDC client secrets, embed signing keys, PATs, database passwords, and proxy credentials. PAT revocation state is persisted in PostgreSQL.
 - Run migrations before traffic by starting the API. Migrations and bootstrap are idempotent.
 
-Use `docker compose -f docker-compose.yml -f compose.production.yml up -d` for Internet-facing operation. Set `APP_ENV=production`; this rejects `LOCAL_DEMO_SEED=true` and non-TLS public API/web/OIDC URLs. The production overlay removes direct service ports, runs Keycloak in production mode against PostgreSQL, and exposes only Caddy on ports 80/443.
+Use `docker compose -f docker-compose.yml -f compose.production.yml up -d` for Internet-facing operation. Set `APP_ENV=production`; this rejects `LOCAL_DEMO_SEED=true` and non-TLS public API/web/OIDC URLs. The production overlay removes direct service ports, imports `realm.production.json` without demo identities, and exposes only Caddy on ports 80/443.
 
 Health endpoints distinguish process liveness (`/livez`) from PostgreSQL health (`/healthz`) and complete storage/database readiness (`/readyz`). Scrape `/metrics` from a protected monitoring network. Rate limits protect embed authentication, ticket mutations, uploads, and MCP.
 

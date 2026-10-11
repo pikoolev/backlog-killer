@@ -2,10 +2,13 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/pikoolev/backlog-killer/internal/attachments"
 	"github.com/pikoolev/backlog-killer/internal/auth"
 	"github.com/pikoolev/backlog-killer/internal/backlog"
 )
@@ -18,6 +21,9 @@ type ListInput struct {
 }
 type TicketInput struct {
 	TicketID string `json:"ticketId"`
+}
+type AttachmentInput struct {
+	AttachmentID string `json:"attachmentId"`
 }
 type ClaimInput struct {
 	TicketIDs      []string `json:"ticketIds"`
@@ -38,7 +44,7 @@ type Output struct {
 	Result any `json:"result"`
 }
 
-func New(service *backlog.Service) *mcp.Server {
+func New(service *backlog.Service, attachmentService *attachments.Service) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "backlog-killer", Version: "1.0.0"}, nil)
 	mcp.AddTool(s, &mcp.Tool{Name: "backlog_list_tickets", Description: "List actionable project tickets"}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListInput) (*mcp.CallToolResult, Output, error) {
 		principal, err := required(ctx, "tickets:read")
@@ -55,6 +61,22 @@ func New(service *backlog.Service) *mcp.Server {
 		}
 		ticket, err := service.Detail(ctx, principal.TenantID, principal.ProjectID, input.TicketID, actor(principal))
 		return result(ticket, err)
+	})
+	mcp.AddTool(s, &mcp.Tool{Name: "backlog_get_attachment", Description: "Read an authorized ticket attachment for inspection; returns metadata and base64 content"}, func(ctx context.Context, _ *mcp.CallToolRequest, input AttachmentInput) (*mcp.CallToolResult, Output, error) {
+		principal, err := required(ctx, "tickets:read")
+		if err != nil {
+			return result(nil, err)
+		}
+		file, metadata, err := attachmentService.Open(ctx, principal.TenantID, principal.ProjectID, input.AttachmentID)
+		if err != nil {
+			return result(nil, err)
+		}
+		defer file.Close()
+		data, err := io.ReadAll(file)
+		if err != nil {
+			return result(nil, err)
+		}
+		return result(map[string]any{"metadata": metadata, "contentBase64": base64.StdEncoding.EncodeToString(data)}, nil)
 	})
 	mcp.AddTool(s, &mcp.Tool{Name: "backlog_claim_batch", Description: "Atomically claim a coherent ticket batch"}, func(ctx context.Context, _ *mcp.CallToolRequest, input ClaimInput) (*mcp.CallToolResult, Output, error) {
 		principal, err := required(ctx, "tickets:claim")

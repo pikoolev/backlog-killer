@@ -2,10 +2,10 @@ SELECT set_config('app.tenant_id','33333333-3333-4333-8333-333333333333',true);
 -- Local compose identities use deterministic Keycloak subjects. Production deployments never enable this seed.
 INSERT INTO tenants(id,name) VALUES('33333333-3333-4333-8333-333333333333','Backlog Killer Demo') ON CONFLICT DO NOTHING;
 INSERT INTO users(id,issuer,subject,email,verified_email) VALUES
-('30000000-0000-4000-8000-000000000001','http://127.0.0.1:8081/realms/backlog-killer','30000000-0000-4000-8000-000000000001','owner@example.test',true),
-('30000000-0000-4000-8000-000000000002','http://127.0.0.1:8081/realms/backlog-killer','30000000-0000-4000-8000-000000000002','triager@example.test',true),
-('30000000-0000-4000-8000-000000000003','http://127.0.0.1:8081/realms/backlog-killer','30000000-0000-4000-8000-000000000003','reporter@example.test',true)
-ON CONFLICT(issuer,subject) DO NOTHING;
+('30000000-0000-4000-8000-000000000001','http://identity.localhost:8081/realms/backlog-killer','30000000-0000-4000-8000-000000000001','owner@example.test',true),
+('30000000-0000-4000-8000-000000000002','http://identity.localhost:8081/realms/backlog-killer','30000000-0000-4000-8000-000000000002','triager@example.test',true),
+('30000000-0000-4000-8000-000000000003','http://identity.localhost:8081/realms/backlog-killer','30000000-0000-4000-8000-000000000003','reporter@example.test',true)
+ON CONFLICT(id) DO UPDATE SET issuer=EXCLUDED.issuer,subject=EXCLUDED.subject,email=EXCLUDED.email,verified_email=EXCLUDED.verified_email;
 INSERT INTO tenant_memberships(tenant_id,user_id,is_owner) VALUES
 ('33333333-3333-4333-8333-333333333333','30000000-0000-4000-8000-000000000001',true),
 ('33333333-3333-4333-8333-333333333333','30000000-0000-4000-8000-000000000002',false),
@@ -13,6 +13,8 @@ INSERT INTO tenant_memberships(tenant_id,user_id,is_owner) VALUES
 ON CONFLICT DO NOTHING;
 INSERT INTO projects(id,tenant_id,project_key,name) VALUES('33333333-3333-4333-8333-333333333334','33333333-3333-4333-8333-333333333333','demo-project','Demo Project') ON CONFLICT DO NOTHING;
 INSERT INTO project_origins(tenant_id,project_id,origin) VALUES
+('33333333-3333-4333-8333-333333333333','33333333-3333-4333-8333-333333333334','http://backlog.localhost:4173'),
+('33333333-3333-4333-8333-333333333333','33333333-3333-4333-8333-333333333334','http://client.localhost:4174'),
 ('33333333-3333-4333-8333-333333333333','33333333-3333-4333-8333-333333333334','http://127.0.0.1:4173'),
 ('33333333-3333-4333-8333-333333333333','33333333-3333-4333-8333-333333333334','http://127.0.0.1:4174') ON CONFLICT DO NOTHING;
 INSERT INTO project_memberships(tenant_id,project_id,user_id,role) VALUES

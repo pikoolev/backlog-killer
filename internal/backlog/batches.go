@@ -11,20 +11,21 @@ type BatchInfo struct {
 	ID           string    `json:"id"`
 	OwnerSubject string    `json:"ownerSubject"`
 	TicketIDs    []string  `json:"ticketIds"`
+	Active       bool      `json:"active"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
 func (s *Service) ListBatches(ctx context.Context, tenant, project string) ([]BatchInfo, error) {
 	out := []BatchInfo{}
 	err := store.WithTenant(ctx, s.DB, tenant, func(ctx context.Context, tx pgx.Tx) error {
-		rows, e := tx.Query(ctx, `SELECT b.id,b.owner_subject,array_agg(bt.ticket_id ORDER BY bt.ticket_id),b.created_at FROM agent_batches b JOIN agent_batch_tickets bt ON (bt.tenant_id,bt.project_id,bt.batch_id)=(b.tenant_id,b.project_id,b.id) WHERE b.project_id=$1 AND b.active AND bt.completed_at IS NULL GROUP BY b.id ORDER BY b.created_at`, project)
+		rows, e := tx.Query(ctx, `SELECT b.id,b.owner_subject,array_agg(bt.ticket_id ORDER BY bt.ticket_id),b.active,b.created_at FROM agent_batches b JOIN agent_batch_tickets bt ON (bt.tenant_id,bt.project_id,bt.batch_id)=(b.tenant_id,b.project_id,b.id) WHERE b.project_id=$1 AND b.active AND bt.completed_at IS NULL GROUP BY b.id ORDER BY b.created_at`, project)
 		if e != nil {
 			return e
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var item BatchInfo
-			if e = rows.Scan(&item.ID, &item.OwnerSubject, &item.TicketIDs, &item.CreatedAt); e != nil {
+			if e = rows.Scan(&item.ID, &item.OwnerSubject, &item.TicketIDs, &item.Active, &item.CreatedAt); e != nil {
 				return e
 			}
 			out = append(out, item)

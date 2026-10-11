@@ -41,6 +41,7 @@ type api struct {
 	embedIssuer                                        auth.EmbedIssuer
 	webPublicURL, oidcPublicIssuer, oidcInternalIssuer string
 	oidcClientID, oidcClientSecret                     string
+	platformAdminSubjects                              map[string]bool
 	authenticator                                      *auth.Authenticator
 }
 type errorBody struct {
@@ -100,7 +101,11 @@ func main() {
 	defer pool.Close()
 	service := &backlog.Service{DB: pool}
 	authentication := auth.New(pool, cfg.OIDCIssuer, cfg.OIDCPublicIssuer, cfg.APIPublicURL, cfg.OIDCAudience, cfg.EmbedSigningKey)
-	application := &api{service: service, attachments: &attachments.Service{DB: pool, Root: cfg.StoragePath}, invitations: &projects.Invitations{DB: pool}, tokens: &projects.Tokens{DB: pool}, admin: &projects.Admin{DB: pool}, flows: &auth.Flows{DB: pool}, embedIssuer: auth.EmbedIssuer{Key: []byte(cfg.EmbedSigningKey), Issuer: cfg.APIPublicURL, Audience: cfg.OIDCAudience}, webPublicURL: cfg.WebPublicURL, oidcPublicIssuer: cfg.OIDCPublicIssuer, oidcInternalIssuer: cfg.OIDCIssuer, oidcClientID: cfg.OIDCClientID, oidcClientSecret: cfg.OIDCClientSecret, authenticator: authentication}
+	platformAdmins := make(map[string]bool, len(cfg.PlatformAdminSubjects))
+	for _, subject := range cfg.PlatformAdminSubjects {
+		platformAdmins[subject] = true
+	}
+	application := &api{service: service, attachments: &attachments.Service{DB: pool, Root: cfg.StoragePath}, invitations: &projects.Invitations{DB: pool}, tokens: &projects.Tokens{DB: pool}, admin: &projects.Admin{DB: pool}, flows: &auth.Flows{DB: pool}, embedIssuer: auth.EmbedIssuer{Key: []byte(cfg.EmbedSigningKey), Issuer: cfg.APIPublicURL, Audience: cfg.OIDCAudience}, webPublicURL: cfg.WebPublicURL, oidcPublicIssuer: cfg.OIDCPublicIssuer, oidcInternalIssuer: cfg.OIDCIssuer, oidcClientID: cfg.OIDCClientID, oidcClientSecret: cfg.OIDCClientSecret, platformAdminSubjects: platformAdmins, authenticator: authentication}
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
@@ -181,7 +186,7 @@ func main() {
 	for _, origin := range cfg.MCPAllowedOrigins {
 		allowed[origin] = true
 	}
-	router.Handle("/mcp", mcpserver.Handler(mcpserver.New(service), allowed))
+	router.Handle("/mcp", mcpserver.Handler(mcpserver.New(service, application.attachments), allowed))
 	router.Get("/.well-known/oauth-protected-resource", func(w http.ResponseWriter, _ *http.Request) {
 		jsonResponse(w, 200, map[string]any{"resource": cfg.APIPublicURL, "authorization_servers": []string{cfg.OIDCPublicIssuer}, "scopes_supported": []string{"tickets:read", "tickets:claim", "tickets:comment", "tickets:complete"}})
 	})
@@ -308,8 +313,8 @@ func (a *api) createProject(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) createTenant(w http.ResponseWriter, r *http.Request) {
 	p, ok := auth.FromContext(r.Context())
-	if !ok || p.Kind == "agent" {
-		writeError(w, r, &backlog.Error{Code: "unauthorized", Status: 401, Message: "authentication required"})
+	if !ok || p.Kind == "agent" || !a.platformAdminSubjects[p.Subject] {
+		writeError(w, r, &backlog.Error{Code: "forbidden", Status: 403, Message: "platform administrator required"})
 		return
 	}
 	var in struct{ Name, ProjectName, ProjectKey string }
@@ -517,7 +522,7 @@ func (a *api) me(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	jsonResponse(w, 200, map[string]any{"principal": p, "projects": items})
+	jsonResponse(w, 200, map[string]any{"principal": p, "projects": items, "platformAdmin": a.platformAdminSubjects[p.Subject]})
 }
 func (a *api) list(w http.ResponseWriter, r *http.Request) {
 	p, ok := authorize(r, "tickets:read")

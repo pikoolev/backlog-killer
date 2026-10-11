@@ -2,18 +2,39 @@ services:
   postgres:
     ports: []
     restart: unless-stopped
+  keycloak-postgres:
+    image: postgres:17.5-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD required}
+    volumes:
+      - keycloak-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
   keycloak:
-    command: ["start", "--import-realm", "--health-enabled=true", "--proxy-headers=xforwarded", "--http-enabled=true"]
+    command: ["/opt/keycloak/config/start-production.sh"]
     ports: []
     restart: unless-stopped
     environment:
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-backlog_killer}
-      KC_DB_USERNAME: ${POSTGRES_MIGRATION_USER:?POSTGRES_MIGRATION_USER required}
-      KC_DB_PASSWORD: ${POSTGRES_MIGRATION_PASSWORD:?POSTGRES_MIGRATION_PASSWORD required}
+      KC_DB_URL: jdbc:postgresql://keycloak-postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD required}
       KC_HOSTNAME: ${OIDC_PUBLIC_HOST:?OIDC_PUBLIC_HOST required}
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:?KEYCLOAK_ADMIN_USERNAME required}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required}
+      WEB_PUBLIC_HOST: ${WEB_PUBLIC_HOST:?WEB_PUBLIC_HOST required}
+      API_PUBLIC_HOST: ${API_PUBLIC_HOST:?API_PUBLIC_HOST required}
+    volumes:
+      - ./infra/keycloak/realm.production.json:/opt/keycloak/config/realm.production.json:ro
+      - ./infra/keycloak/start-production.sh:/opt/keycloak/config/start-production.sh:ro
+    depends_on:
+      keycloak-postgres: {condition: service_healthy}
   api:
     ports: []
     restart: unless-stopped
@@ -28,8 +49,10 @@ services:
       MIGRATION_DATABASE_URL: postgres://${POSTGRES_MIGRATION_USER:?POSTGRES_MIGRATION_USER required}:${POSTGRES_MIGRATION_PASSWORD}@postgres:5432/${POSTGRES_DB:-backlog_killer}?sslmode=disable
       API_PUBLIC_URL: https://${API_PUBLIC_HOST:?API_PUBLIC_HOST required}
       WEB_PUBLIC_URL: https://${WEB_PUBLIC_HOST:?WEB_PUBLIC_HOST required}
+      OIDC_ISSUER: http://keycloak:8080/realms/backlog-killer
       OIDC_PUBLIC_ISSUER: https://${OIDC_PUBLIC_HOST:?OIDC_PUBLIC_HOST required}/realms/backlog-killer
       MCP_ALLOWED_ORIGINS: https://${WEB_PUBLIC_HOST}
+      PLATFORM_ADMIN_SUBJECTS: ${PLATFORM_ADMIN_SUBJECTS:?PLATFORM_ADMIN_SUBJECTS required}
       ONPREM_TENANT_NAME: ${ONPREM_TENANT_NAME:-}
       ONPREM_PROJECT_NAME: ${ONPREM_PROJECT_NAME:-}
       ONPREM_PROJECT_KEY: ${ONPREM_PROJECT_KEY:-}
@@ -39,6 +62,16 @@ services:
   web:
     ports: []
     restart: unless-stopped
+    build:
+      args:
+        APP: web
+        VITE_API_URL: https://${API_PUBLIC_HOST:?API_PUBLIC_HOST required}
+        VITE_OIDC_URL: https://${OIDC_PUBLIC_HOST:?OIDC_PUBLIC_HOST required}
+        VITE_OIDC_REALM: backlog-killer
+        VITE_OIDC_CLIENT_ID: backlog-killer-web
+    environment:
+      API_PUBLIC_URL: https://${API_PUBLIC_HOST}
+      OIDC_PUBLIC_URL: https://${OIDC_PUBLIC_HOST}
   demo:
     profiles: ["disabled"]
   proxy:
@@ -60,3 +93,4 @@ services:
 volumes:
   caddy-data:
   caddy-config:
+  keycloak-postgres-data:
