@@ -1,3 +1,7 @@
+GRANT USAGE ON SCHEMA public TO backlog_admin;
+GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO backlog_admin;
+GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO backlog_admin;
+
 
 
 CREATE TYPE tenant_role AS ENUM ('owner','admin','member');
