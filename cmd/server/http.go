@@ -84,12 +84,14 @@ func (a *api) cors(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		projectID := chi.URLParam(r, "projectId")
-		var allowed bool
-		_ = a.service.DB.QueryRow(r.Context(), `SELECT lookup_project_id_origin($1,$2)`, projectID, origin).Scan(&allowed)
-		if !allowed {
-			writeError(w, r, &backlog.Error{Code: "origin_forbidden", Status: http.StatusForbidden, Message: "origin not allowed"})
-			return
+		if origin != a.webPublicURL {
+			projectID := chi.URLParam(r, "projectId")
+			var allowed bool
+			_ = a.service.DB.QueryRow(r.Context(), `SELECT lookup_project_id_origin($1,$2)`, projectID, origin).Scan(&allowed)
+			if !allowed {
+				writeError(w, r, &backlog.Error{Code: "origin_forbidden", Status: http.StatusForbidden, Message: "origin not allowed"})
+				return
+			}
 		}
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Vary", "Origin")

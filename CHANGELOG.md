@@ -7,6 +7,8 @@
 - Hardened tenant/project authorization, invitation acceptance, claim restore/delete handling, on-prem bootstrap, attachment quotas, deletion reconciliation, and platform-admin issuer binding.
 - Added complete OpenAPI administration/embed DTOs, an executable production Compose smoke, managed Keycloak realm updates, and consistent application/Keycloak/attachment backup and restore.
 - Embedded the platform client catalog into the Administration sidebar view, normalized origin input, and added in-form progress, success, and error feedback for origins and agent tokens.
+- Allowed the exact dashboard URL through project-scoped CORS so administrators can add a project's first client origin; embed origins remain restricted to the project's allowlist.
+- Added dedicated super-admin Clients, Projects, and Users sidebar catalogs plus dashboard ticket creation and inline backlog deletion.
 
 
 ## 0.2.0 — Local SaaS release candidate
