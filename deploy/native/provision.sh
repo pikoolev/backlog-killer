@@ -107,7 +107,7 @@ sudo -u postgres psql -v ON_ERROR_STOP=1 \
   --set=app_db="$POSTGRES_DB" \
   --set=keycloak_password="$KEYCLOAK_DB_PASSWORD" <<'SQL'
 SELECT format('CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD %L', :'migration_user', :'migration_password') WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'migration_user') \gexec
-SELECT format('ALTER ROLE %I PASSWORD %L', :'migration_user', :'migration_password') \gexec
+SELECT format('ALTER ROLE %I CREATEROLE PASSWORD %L', :'migration_user', :'migration_password') \gexec
 SELECT format('CREATE ROLE backlog_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD %L', :'runtime_password') WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'backlog_runtime') \gexec
 SELECT format('ALTER ROLE backlog_runtime PASSWORD %L', :'runtime_password') \gexec
 SELECT format('CREATE DATABASE %I OWNER %I', :'app_db', :'migration_user') WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'app_db') \gexec
@@ -321,6 +321,9 @@ systemctl enable --now backlog-api caddy
 systemctl restart backlog-api caddy
 for _ in {1..60}; do curl -fsS http://127.0.0.1:8080/readyz >/dev/null 2>&1 && break; sleep 2; done
 curl -fsS http://127.0.0.1:8080/readyz >/dev/null
+sudo -u postgres psql -v ON_ERROR_STOP=1 --set=migration_user="$POSTGRES_MIGRATION_USER" <<'SQL'
+SELECT format('ALTER ROLE %I NOCREATEROLE', :'migration_user') \gexec
+SQL
 
 cleanup_config
 trap - EXIT
