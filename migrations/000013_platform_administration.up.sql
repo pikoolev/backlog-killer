@@ -38,8 +38,8 @@ DECLARE uid uuid; tid uuid:=gen_random_uuid(); pid uuid:=gen_random_uuid(); BEGI
  INSERT INTO project_memberships(tenant_id,project_id,user_id,role) VALUES(tid,pid,uid,'admin');
  RETURN QUERY SELECT tid,pid;
 END $$;
-ALTER FUNCTION create_tenant_with_owner(text,text,text,text,text,text) OWNER TO backlog_admin;
 GRANT EXECUTE ON FUNCTION list_user_projects(text,text),resolve_project_identity(text,text,uuid),create_tenant_with_owner(text,text,text,text,text,text) TO backlog_runtime;
+ALTER FUNCTION create_tenant_with_owner(text,text,text,text,text,text) OWNER TO backlog_admin;
 
 CREATE TABLE platform_admin_audit (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -121,4 +121,5 @@ $$;
 ALTER FUNCTION platform_admin_log(text,text,text,uuid,uuid,uuid,jsonb) OWNER TO backlog_admin;
 
 REVOKE ALL ON FUNCTION platform_admin_catalog(),platform_admin_update_tenant(uuid,text),platform_admin_create_project(uuid,text,text),platform_admin_update_project(uuid,text,text),platform_admin_upsert_user(uuid,text,text,text,tenant_role),platform_admin_remove_user(uuid,uuid),platform_admin_mask_project(uuid,uuid),platform_admin_log(text,text,text,uuid,uuid,uuid,jsonb) FROM PUBLIC;
+SET LOCAL ROLE backlog_admin;
 GRANT EXECUTE ON FUNCTION platform_admin_catalog(),platform_admin_update_tenant(uuid,text),platform_admin_create_project(uuid,text,text),platform_admin_update_project(uuid,text,text),platform_admin_upsert_user(uuid,text,text,text,tenant_role),platform_admin_remove_user(uuid,uuid),platform_admin_mask_project(uuid,uuid),platform_admin_log(text,text,text,uuid,uuid,uuid,jsonb) TO backlog_runtime;
