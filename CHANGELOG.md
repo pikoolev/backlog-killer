@@ -6,6 +6,7 @@
 - Restricted annotation to explicit right click and screenshots to the selected element with form/private-content masking.
 - Hardened tenant/project authorization, invitation acceptance, claim restore/delete handling, on-prem bootstrap, attachment quotas, deletion reconciliation, and platform-admin issuer binding.
 - Added complete OpenAPI administration/embed DTOs, an executable production Compose smoke, managed Keycloak realm updates, and consistent application/Keycloak/attachment backup and restore.
+- Embedded the platform client catalog into the Administration sidebar view, normalized origin input, and added in-form progress, success, and error feedback for origins and agent tokens.
 
 
 ## 0.2.0 — Local SaaS release candidate
