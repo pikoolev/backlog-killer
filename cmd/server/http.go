@@ -23,6 +23,17 @@ func (a *api) projectIdentity(next http.Handler) http.Handler {
 			return
 		}
 		projectID := chi.URLParam(r, "projectId")
+		if principal.Source == "oidc" && a.platformAdminSubjects[principal.Issuer+"|"+principal.Subject] && r.Header.Get("X-Platform-Mask") == "true" {
+			masked, err := a.platform.Mask(r.Context(), projectID, r.Header.Get("X-Platform-User"))
+			if err != nil {
+				writeError(w, r, backlog.ErrNotFound)
+				return
+			}
+			principal.ID, principal.TenantID, principal.ProjectID, principal.Role = masked.UserID, masked.TenantID, masked.ProjectID, masked.Role
+			_ = a.platform.Audit(r.Context(), principal.Issuer, principal.Subject, "mask_project_request", &masked.TenantID, &masked.ProjectID, &masked.UserID, map[string]string{"method": r.Method, "path": r.URL.Path})
+			next.ServeHTTP(w, r.WithContext(auth.WithPrincipal(r.Context(), principal)))
+			return
+		}
 		if principal.Source == "embed" {
 			if principal.ProjectID != projectID {
 				writeError(w, r, backlog.ErrNotFound)
@@ -56,7 +67,7 @@ func (a *api) dashboardCors(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Add("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,Idempotency-Key,If-Match")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,Idempotency-Key,If-Match,X-Platform-Mask,X-Platform-User")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
 				return

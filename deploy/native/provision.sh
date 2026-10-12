@@ -110,6 +110,8 @@ SELECT format('CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERI
 SELECT format('ALTER ROLE %I CREATEROLE PASSWORD %L', :'migration_user', :'migration_password') \gexec
 SELECT format('CREATE ROLE backlog_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD %L', :'runtime_password') WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'backlog_runtime') \gexec
 SELECT format('ALTER ROLE backlog_runtime PASSWORD %L', :'runtime_password') \gexec
+SELECT 'CREATE ROLE backlog_admin NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT BYPASSRLS' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'backlog_admin') \gexec
+SELECT format('GRANT backlog_admin TO %I WITH SET TRUE', :'migration_user') \gexec
 SELECT format('CREATE DATABASE %I OWNER %I', :'app_db', :'migration_user') WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'app_db') \gexec
 SELECT format('CREATE ROLE keycloak LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD %L', :'keycloak_password') WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'keycloak') \gexec
 SELECT format('ALTER ROLE keycloak PASSWORD %L', :'keycloak_password') \gexec
@@ -159,12 +161,16 @@ install -d -m 0755 "$RELEASE"
   VITE_API_URL="https://$API_PUBLIC_HOST" VITE_OIDC_URL="https://$OIDC_PUBLIC_HOST" VITE_SDK_URL="https://$SDK_PUBLIC_HOST/backlog-killer.js" VITE_OIDC_REALM="$OIDC_REALM" VITE_OIDC_CLIENT_ID="$OIDC_CLIENT_ID" pnpm install --frozen-lockfile
   VITE_API_URL="https://$API_PUBLIC_HOST" VITE_OIDC_URL="https://$OIDC_PUBLIC_HOST" VITE_SDK_URL="https://$SDK_PUBLIC_HOST/backlog-killer.js" VITE_OIDC_REALM="$OIDC_REALM" VITE_OIDC_CLIENT_ID="$OIDC_CLIENT_ID" pnpm --filter @backlog-killer/web build
   pnpm --filter @backlog-killer/sdk build
+  pnpm --filter @backlog-killer/extension build
 )
 cp -a "$SOURCE/migrations" "$RELEASE/migrations"
 cp -a "$SOURCE/apps/web/dist" "$RELEASE/web"
 install -d -m 0755 "$RELEASE/sdk"
 cp "$SOURCE/packages/sdk/dist/backlog-killer.js" "$RELEASE/sdk/backlog-killer.js"
 chown -R root:root "$RELEASE"
+cp -a "$SOURCE/apps/extension/dist" "$RELEASE/extension"
+(cd "$RELEASE/extension" && zip -qr "$RELEASE/backlog-killer-extension.zip" .)
+cp "$RELEASE/backlog-killer-extension.zip" "$RELEASE/sdk/backlog-killer-extension.zip"
 chmod -R a+rX "$RELEASE"
 chmod 0755 "$RELEASE/server"
 ln -sfn "$RELEASE" /opt/backlog-killer/current
@@ -221,6 +227,13 @@ if [[ -z $client_id ]]; then
 else
   printf '%s' "$client_json" | "$KCADM" update "clients/$client_id" -r "$OIDC_REALM" --config "$KCADM_CONFIG" -f - >/dev/null
 fi
+extension_client=$("$KCADM" get clients -r "$OIDC_REALM" --config "$KCADM_CONFIG" -q clientId=backlog-killer-extension --fields id --format csv --noquotes | tr -d '\r')
+extension_json=$(jq -n '{clientId:"backlog-killer-extension",publicClient:true,standardFlowEnabled:true,directAccessGrantsEnabled:false,redirectUris:["https://nkkilejiaedcndfekaibdagbnodglnoe.chromiumapp.org/oidc"],webOrigins:[],protocolMappers:[{name:"audience",protocol:"openid-connect",protocolMapper:"oidc-audience-mapper",consentRequired:false,config:{"included.custom.audience":"backlog-killer-api","id.token.claim":"false","access.token.claim":"true"}}]}')
+if [[ -z $extension_client ]]; then
+  printf '%s' "$extension_json" | "$KCADM" create clients -r "$OIDC_REALM" --config "$KCADM_CONFIG" -f - >/dev/null
+else
+  printf '%s' "$extension_json" | "$KCADM" update "clients/$extension_client" -r "$OIDC_REALM" --config "$KCADM_CONFIG" -f - >/dev/null
+fi
 user_id=$("$KCADM" get users -r "$OIDC_REALM" --config "$KCADM_CONFIG" -q username="$INITIAL_ADMIN_USERNAME" --fields id --format csv --noquotes | tr -d '\r')
 if [[ -z $user_id ]]; then
   "$KCADM" create users -r "$OIDC_REALM" --config "$KCADM_CONFIG" -s username="$INITIAL_ADMIN_USERNAME" -s email="$INITIAL_ADMIN_EMAIL" -s enabled=true -s emailVerified=true >/dev/null
@@ -240,6 +253,8 @@ OIDC_PUBLIC_ISSUER=https://$OIDC_PUBLIC_HOST/realms/$OIDC_REALM
 OIDC_AUDIENCE=$OIDC_AUDIENCE
 OIDC_CLIENT_ID=$OIDC_CLIENT_ID
 OIDC_CLIENT_SECRET=
+KEYCLOAK_ADMIN_USERNAME=admin
+KEYCLOAK_ADMIN_PASSWORD=$KEYCLOAK_ADMIN_PASSWORD
 API_PUBLIC_URL=https://$API_PUBLIC_HOST
 WEB_PUBLIC_URL=https://$PANEL_PUBLIC_HOST
 EMBED_SIGNING_KEY=$EMBED_SIGNING_KEY

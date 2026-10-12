@@ -36,6 +36,8 @@ type api struct {
 	invitations                                        *projects.Invitations
 	tokens                                             *projects.Tokens
 	admin                                              *projects.Admin
+	platform                                           *projects.PlatformAdmin
+	identities                                         *projects.IdentityManager
 	flows                                              *auth.Flows
 	embedIssuer                                        auth.EmbedIssuer
 	webPublicURL, oidcPublicIssuer, oidcInternalIssuer string
@@ -104,7 +106,7 @@ func main() {
 	for _, subject := range cfg.PlatformAdminSubjects {
 		platformAdmins[subject] = true
 	}
-	application := &api{service: service, attachments: &attachments.Service{DB: pool, Root: cfg.StoragePath, ProjectQuotaBytes: cfg.StorageProjectQuotaBytes}, invitations: &projects.Invitations{DB: pool}, tokens: &projects.Tokens{DB: pool}, admin: &projects.Admin{DB: pool}, flows: &auth.Flows{DB: pool}, embedIssuer: auth.EmbedIssuer{Key: []byte(cfg.EmbedSigningKey), Issuer: cfg.APIPublicURL, Audience: cfg.OIDCAudience}, webPublicURL: cfg.WebPublicURL, oidcPublicIssuer: cfg.OIDCPublicIssuer, oidcInternalIssuer: cfg.OIDCIssuer, oidcClientID: cfg.OIDCClientID, oidcClientSecret: cfg.OIDCClientSecret, platformAdminSubjects: platformAdmins, authenticator: authentication}
+	application := &api{service: service, attachments: &attachments.Service{DB: pool, Root: cfg.StoragePath, ProjectQuotaBytes: cfg.StorageProjectQuotaBytes}, invitations: &projects.Invitations{DB: pool}, tokens: &projects.Tokens{DB: pool}, admin: &projects.Admin{DB: pool}, platform: &projects.PlatformAdmin{DB: pool}, identities: &projects.IdentityManager{BaseURL: strings.TrimSuffix(cfg.OIDCIssuer, "/realms/backlog-killer"), Realm: "backlog-killer", AdminUsername: cfg.KeycloakAdminUsername, AdminPassword: cfg.KeycloakAdminPassword, Client: &http.Client{Timeout: 10 * time.Second}}, flows: &auth.Flows{DB: pool}, embedIssuer: auth.EmbedIssuer{Key: []byte(cfg.EmbedSigningKey), Issuer: cfg.APIPublicURL, Audience: cfg.OIDCAudience}, webPublicURL: cfg.WebPublicURL, oidcPublicIssuer: cfg.OIDCPublicIssuer, oidcInternalIssuer: cfg.OIDCIssuer, oidcClientID: cfg.OIDCClientID, oidcClientSecret: cfg.OIDCClientSecret, platformAdminSubjects: platformAdmins, authenticator: authentication}
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
@@ -150,6 +152,14 @@ func main() {
 		r.Post("/embed/token", application.embedToken)
 		r.Options("/embed/token", application.embedTokenPreflight)
 		r.Post("/tenants", application.createTenant)
+		r.Route("/platform", func(r chi.Router) {
+			r.Get("/tenants", application.platformCatalog)
+			r.Patch("/tenants/{tenantId}", application.platformUpdateTenant)
+			r.Post("/tenants/{tenantId}/projects", application.platformCreateProject)
+			r.Patch("/projects/{platformProjectId}", application.platformUpdateProject)
+			r.Post("/tenants/{tenantId}/users", application.platformUpsertUser)
+			r.Delete("/tenants/{tenantId}/users/{userId}", application.platformRemoveUser)
+		})
 		r.Post("/projects", application.createProject)
 		r.Route("/projects/{projectId}", func(r chi.Router) {
 			r.Use(application.projectIdentity)
