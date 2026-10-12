@@ -137,6 +137,7 @@ id backlog >/dev/null 2>&1 || useradd --system --home /var/lib/backlog-killer --
 id keycloak >/dev/null 2>&1 || useradd --system --home /var/lib/keycloak --shell /usr/sbin/nologin keycloak
 install -d -o backlog -g backlog -m 0750 /var/lib/backlog-killer/uploads
 install -d -o keycloak -g keycloak -m 0750 /var/lib/keycloak
+install -d -o keycloak -g keycloak -m 0750 /opt/keycloak/keycloak-26.2.5/data
 
 if [[ ! -x /opt/keycloak/keycloak-26.2.5/bin/kc.sh ]]; then
   curl -fsSL https://github.com/keycloak/keycloak/releases/download/26.2.5/keycloak-26.2.5.tar.gz -o /tmp/keycloak.tar.gz
