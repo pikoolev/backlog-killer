@@ -75,6 +75,7 @@ def main() -> None:
     ]
     deploy_env = "".join(f"{name}={shlex.quote(cfg.get(name, ''))}\n" for name in allowed).encode()
 
+    deployment_id = os.urandom(8).hex()
     with tempfile.TemporaryDirectory(prefix="backlog-killer-deploy-") as temp:
         bundle = pathlib.Path(temp) / "source.tar.gz"
         with tarfile.open(bundle, "w:gz") as archive:
@@ -97,13 +98,15 @@ def main() -> None:
         try:
             sftp = client.open_sftp()
             try:
-                sftp.put(str(bundle), "/root/source.tar.gz")
-                with sftp.file("/root/deploy.env", "wb") as target:
+                remote_bundle = f"/root/source-{deployment_id}.tar.gz"
+                remote_config = f"/root/deploy-{deployment_id}.env"
+                sftp.put(str(bundle), remote_bundle)
+                with sftp.file(remote_config, "wb") as target:
                     target.write(deploy_env)
-                sftp.chmod("/root/deploy.env", 0o600)
+                sftp.chmod(remote_config, 0o600)
             finally:
                 sftp.close()
-            run(client, "rm -rf /root/backlog-killer-source && mkdir -p /root/backlog-killer-source && tar -xzf /root/source.tar.gz -C /root/backlog-killer-source && rm -f /root/source.tar.gz && bash /root/backlog-killer-source/deploy/native/provision.sh /root/deploy.env")
+            run(client, f"rm -rf /root/backlog-killer-source && mkdir -p /root/backlog-killer-source && tar -xzf {remote_bundle} -C /root/backlog-killer-source && rm -f {remote_bundle} && bash /root/backlog-killer-source/deploy/native/provision.sh {remote_config}")
         finally:
             client.close()
 
