@@ -198,7 +198,7 @@ TimeoutStartSec=180
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/var/lib/keycloak /opt/keycloak/keycloak-26.2.5/data
+ReadWritePaths=/var/lib/keycloak /opt/keycloak/keycloak-26.2.5
 
 [Install]
 WantedBy=multi-user.target
