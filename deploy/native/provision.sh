@@ -156,8 +156,8 @@ install -d -m 0755 "$RELEASE"
 (
   cd "$SOURCE"
   /usr/local/go/bin/go build -trimpath -ldflags='-s -w' -o "$RELEASE/server" ./cmd/server
-  VITE_API_URL="https://$API_PUBLIC_HOST" VITE_OIDC_URL="https://$OIDC_PUBLIC_HOST" VITE_OIDC_REALM="$OIDC_REALM" VITE_OIDC_CLIENT_ID="$OIDC_CLIENT_ID" pnpm install --frozen-lockfile
-  VITE_API_URL="https://$API_PUBLIC_HOST" VITE_OIDC_URL="https://$OIDC_PUBLIC_HOST" VITE_OIDC_REALM="$OIDC_REALM" VITE_OIDC_CLIENT_ID="$OIDC_CLIENT_ID" pnpm --filter @backlog-killer/web build
+  VITE_API_URL="https://$API_PUBLIC_HOST" VITE_OIDC_URL="https://$OIDC_PUBLIC_HOST" VITE_SDK_URL="https://$SDK_PUBLIC_HOST/backlog-killer.js" VITE_OIDC_REALM="$OIDC_REALM" VITE_OIDC_CLIENT_ID="$OIDC_CLIENT_ID" pnpm install --frozen-lockfile
+  VITE_API_URL="https://$API_PUBLIC_HOST" VITE_OIDC_URL="https://$OIDC_PUBLIC_HOST" VITE_SDK_URL="https://$SDK_PUBLIC_HOST/backlog-killer.js" VITE_OIDC_REALM="$OIDC_REALM" VITE_OIDC_CLIENT_ID="$OIDC_CLIENT_ID" pnpm --filter @backlog-killer/web build
   pnpm --filter @backlog-killer/sdk build
 )
 cp -a "$SOURCE/migrations" "$RELEASE/migrations"
