@@ -16,6 +16,7 @@ LANGUAGE sql SECURITY DEFINER SET search_path=public AS $$
  FROM users u JOIN tenant_memberships tm ON tm.user_id=u.id JOIN projects p ON p.tenant_id=tm.tenant_id
  WHERE u.issuer=lookup_issuer AND u.subject=lookup_subject ORDER BY p.name,p.id;
 $$;
+GRANT EXECUTE ON FUNCTION list_user_projects(text,text) TO backlog_runtime;
 ALTER FUNCTION list_user_projects(text,text) OWNER TO backlog_admin;
 
 CREATE OR REPLACE FUNCTION resolve_project_identity(lookup_issuer text,lookup_subject text,lookup_project uuid)
@@ -25,6 +26,7 @@ LANGUAGE sql SECURITY DEFINER SET search_path=public AS $$
  FROM users u JOIN tenant_memberships tm ON tm.user_id=u.id JOIN projects p ON p.tenant_id=tm.tenant_id
  WHERE u.issuer=lookup_issuer AND u.subject=lookup_subject AND p.id=lookup_project;
 $$;
+GRANT EXECUTE ON FUNCTION resolve_project_identity(text,text,uuid) TO backlog_runtime;
 ALTER FUNCTION resolve_project_identity(text,text,uuid) OWNER TO backlog_admin;
 
 CREATE OR REPLACE FUNCTION create_tenant_with_owner(lookup_issuer text,lookup_subject text,lookup_email text,tenant_name text,project_name text,project_key_value text)
@@ -38,7 +40,7 @@ DECLARE uid uuid; tid uuid:=gen_random_uuid(); pid uuid:=gen_random_uuid(); BEGI
  INSERT INTO project_memberships(tenant_id,project_id,user_id,role) VALUES(tid,pid,uid,'admin');
  RETURN QUERY SELECT tid,pid;
 END $$;
-GRANT EXECUTE ON FUNCTION list_user_projects(text,text),resolve_project_identity(text,text,uuid),create_tenant_with_owner(text,text,text,text,text,text) TO backlog_runtime;
+GRANT EXECUTE ON FUNCTION create_tenant_with_owner(text,text,text,text,text,text) TO backlog_runtime;
 ALTER FUNCTION create_tenant_with_owner(text,text,text,text,text,text) OWNER TO backlog_admin;
 
 CREATE TABLE platform_admin_audit (
@@ -120,6 +122,6 @@ RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path=public AS $$
 $$;
 ALTER FUNCTION platform_admin_log(text,text,text,uuid,uuid,uuid,jsonb) OWNER TO backlog_admin;
 
-REVOKE ALL ON FUNCTION platform_admin_catalog(),platform_admin_update_tenant(uuid,text),platform_admin_create_project(uuid,text,text),platform_admin_update_project(uuid,text,text),platform_admin_upsert_user(uuid,text,text,text,tenant_role),platform_admin_remove_user(uuid,uuid),platform_admin_mask_project(uuid,uuid),platform_admin_log(text,text,text,uuid,uuid,uuid,jsonb) FROM PUBLIC;
 SET LOCAL ROLE backlog_admin;
+REVOKE ALL ON FUNCTION platform_admin_catalog(),platform_admin_update_tenant(uuid,text),platform_admin_create_project(uuid,text,text),platform_admin_update_project(uuid,text,text),platform_admin_upsert_user(uuid,text,text,text,tenant_role),platform_admin_remove_user(uuid,uuid),platform_admin_mask_project(uuid,uuid),platform_admin_log(text,text,text,uuid,uuid,uuid,jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION platform_admin_catalog(),platform_admin_update_tenant(uuid,text),platform_admin_create_project(uuid,text,text),platform_admin_update_project(uuid,text,text),platform_admin_upsert_user(uuid,text,text,text,tenant_role),platform_admin_remove_user(uuid,uuid),platform_admin_mask_project(uuid,uuid),platform_admin_log(text,text,text,uuid,uuid,uuid,jsonb) TO backlog_runtime;
