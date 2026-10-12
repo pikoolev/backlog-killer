@@ -40,17 +40,16 @@ fi
 source "$SECRETS"
 
 log 'Installing operating-system packages'
+rm -f /etc/apt/sources.list.d/pgdg.list /etc/apt/sources.list.d/caddy-stable.list
 apt-get update -qq
 apt-get dist-upgrade -y -qq
 apt-get install -y -qq ca-certificates curl git gnupg jq openssl rsync tar unzip ufw fail2ban openjdk-21-jre-headless debian-keyring debian-archive-keyring apt-transport-https
-install -d -m 0755 /etc/apt/keyrings
-if [[ ! -f /etc/apt/keyrings/postgresql.asc ]]; then
-  curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /etc/apt/keyrings/postgresql.asc
-fi
-printf 'deb [signed-by=/etc/apt/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main\n' >/etc/apt/sources.list.d/pgdg.list
-if [[ ! -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg ]]; then
-  curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-fi
+install -d -m 0755 /etc/apt/keyrings /usr/share/keyrings
+curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor --yes -o /etc/apt/keyrings/postgresql.gpg
+chmod 0644 /etc/apt/keyrings/postgresql.gpg
+printf 'deb [signed-by=/etc/apt/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt noble-pgdg main\n' >/etc/apt/sources.list.d/pgdg.list
+curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+chmod 0644 /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 printf 'deb [signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main\n' >/etc/apt/sources.list.d/caddy-stable.list
 apt-get update -qq
 apt-get install -y -qq postgresql-17 postgresql-client-17 caddy
