@@ -93,6 +93,7 @@ def main() -> None:
             look_for_keys=False,
             allow_agent=False,
             timeout=20,
+            banner_timeout=60,
             auth_timeout=20,
         )
         try:
