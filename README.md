@@ -62,20 +62,14 @@ The dashboard includes project switching, origins, members/invitations, PAT crea
 
 ## Production deployment
 
-Local Compose is a development fixture. Production must use both files and explicit secrets/hosts:
+The repository supports two production profiles:
 
-```sh
-export API_PUBLIC_HOST=api.example.com WEB_PUBLIC_HOST=backlog.example.com OIDC_PUBLIC_HOST=identity.example.com
-export DEPLOYMENT_MODE=saas PLATFORM_ADMIN_SUBJECTS='https://identity.example.com/realms/backlog-killer|production-owner-oidc-subject'
-export POSTGRES_MIGRATION_USER=backlog_migrator POSTGRES_MIGRATION_PASSWORD='...' POSTGRES_PASSWORD='...'
-export KEYCLOAK_DB_PASSWORD='...' KEYCLOAK_ADMIN_USERNAME=admin KEYCLOAK_ADMIN_PASSWORD='...' EMBED_SIGNING_KEY='...'
-docker compose -f docker-compose.yml -f compose.production.yml config
-docker compose -f docker-compose.yml -f compose.production.yml up -d
-```
+- Native Ubuntu 24.04 deployment: populate `.env`, then run `powershell -ExecutionPolicy Bypass -File scripts/deploy-native.ps1`. The launcher reads `VPS_PASSWORD` locally and authenticates through Paramiko without placing the password in process arguments or logs. See `docs/native-deployment.md`.
+- Container deployment: use `docker-compose.yml` with `compose.production.yml` and the explicit secrets required by that overlay.
 
-The production overlay disables the demo site and seed, removes direct database/identity/API/web ports, gives Keycloak a separate persistent PostgreSQL database and a production realm without demo users, and terminates TLS through Caddy. Startup rejects demo seed and HTTP public URLs when `APP_ENV=production`.
+The native profile serves the future landing host, SDK, panel, API/MCP, and OIDC on separate TLS hosts. Caddy obtains and renews certificates. PostgreSQL, Keycloak, and the API bind only to the VPS loopback or local PostgreSQL socket. Root password SSH access remains enabled as the required break-glass path.
 
-Runtime probes: `/livez`, `/healthz`, `/readyz`; Prometheus text metrics: `/metrics`. Back up application PostgreSQL and attachments as one recovery point with `BACKUP_DIR=/secure/path ./scripts/backup.sh`. Back up the separate Keycloak PostgreSQL volume with the VPS platform snapshot/backup policy.
+Runtime probes: `/livez`, `/healthz`, `/readyz`; Prometheus text metrics: `/metrics`.
 
 ## Release gate
 
