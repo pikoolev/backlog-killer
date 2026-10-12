@@ -190,7 +190,7 @@ func main() {
 	router.Get("/.well-known/oauth-protected-resource", func(w http.ResponseWriter, _ *http.Request) {
 		jsonResponse(w, 200, map[string]any{"resource": cfg.APIPublicURL, "authorization_servers": []string{cfg.OIDCPublicIssuer}, "scopes_supported": []string{"tickets:read", "tickets:claim", "tickets:comment", "tickets:complete"}})
 	})
-	server := http.Server{Addr: "0.0.0.0:8080", Handler: http.MaxBytesHandler(router, 12<<20), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+	server := http.Server{Addr: "127.0.0.1:8080", Handler: http.MaxBytesHandler(router, 12<<20), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		<-ctx.Done()
 		shutdown, stop := context.WithTimeout(context.Background(), 10*time.Second)
