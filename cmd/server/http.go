@@ -84,7 +84,7 @@ func (a *api) cors(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if origin != a.webPublicURL {
+		if origin != a.webPublicURL && origin != "chrome-extension://nkkilejiaedcndfekaibdagbnodglnoe" {
 			projectID := chi.URLParam(r, "projectId")
 			var allowed bool
 			_ = a.service.DB.QueryRow(r.Context(), `SELECT lookup_project_id_origin($1,$2)`, projectID, origin).Scan(&allowed)

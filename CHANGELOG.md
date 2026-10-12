@@ -9,6 +9,7 @@
 - Embedded the platform client catalog into the Administration sidebar view, normalized origin input, and added in-form progress, success, and error feedback for origins and agent tokens.
 - Allowed the exact dashboard URL through project-scoped CORS so administrators can add a project's first client origin; embed origins remain restricted to the project's allowlist.
 - Added dedicated super-admin Clients, Projects, and Users sidebar catalogs plus dashboard ticket creation and inline backlog deletion.
+- Allowed only the pinned production extension origin through project CORS, added in-page yellow ticket notes, two-button element selection, immediate post-create canvas refresh, and collapsed extension statistics.
 
 
 ## 0.2.0 — Local SaaS release candidate

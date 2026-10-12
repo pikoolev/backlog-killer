@@ -19,6 +19,7 @@ The checked-in manifest key gives unpacked builds the stable extension ID `nkkil
 ## Behavior
 
 - The active tab origin is matched against exact project origins configured in the dashboard.
-- Summary cards show all ticket counts, the current URL-path count, review count, and every workflow status.
-- **Добавить тикет** starts element selection in the active page. Right-click the target element, enter the task, choose priority, and submit.
-- The current-page list is deliberately concise. Full editing, review, attachments, and agent workflow remain in the dashboard and MCP API.
+- Statistics are collapsed by default; the compact summary expands to show every workflow status.
+- **Добавить тикет** starts element selection in the active page. Press the left and right mouse buttons together on the target block, enter the task, choose priority, and submit.
+- Active tickets for the current URL path appear on the page as yellow sticky notes anchored to their selected elements. Creating a ticket refreshes the canvas immediately.
+- The current-page sidebar list is deliberately concise. Full editing, review, attachments, and agent workflow remain in the dashboard and MCP API.
