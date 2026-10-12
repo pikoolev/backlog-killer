@@ -172,7 +172,12 @@ func (s *Service) List(ctx context.Context, tenant, project string, statuses []S
 	})
 	return out, err
 }
-func (s *Service) ListFiltered(ctx context.Context, tenant, project string, statuses []Status, page string, limit int, cursor time.Time) ([]Ticket, *time.Time, error) {
+type Cursor struct {
+	UpdatedAt time.Time
+	ID        string
+}
+
+func (s *Service) ListFiltered(ctx context.Context, tenant, project string, statuses []Status, page string, limit int, cursor Cursor) ([]Ticket, *Cursor, error) {
 	if limit < 1 || limit > 100 {
 		limit = 50
 	}
@@ -181,13 +186,18 @@ func (s *Service) ListFiltered(ctx context.Context, tenant, project string, stat
 		statusValues[i] = string(status)
 	}
 	out := []Ticket{}
-	var next *time.Time
+	var next *Cursor
 	err := store.WithTenant(ctx, s.DB, tenant, func(ctx context.Context, tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, ticketSelect+` WHERE t.project_id=$1 AND (cardinality($2::text[])=0 OR t.status::text=ANY($2::text[])) AND ($3='' OR p.url_path=$3 OR (p.url_pattern IS NOT NULL AND $3 LIKE replace(p.url_pattern,'*','%'))) AND ($4::timestamptz IS NULL OR t.updated_at<$4) ORDER BY t.updated_at DESC,t.id DESC LIMIT $5`, project, statusValues, page, func() any {
-			if cursor.IsZero() {
+		rows, err := tx.Query(ctx, ticketSelect+` WHERE t.project_id=$1 AND (cardinality($2::text[])=0 OR t.status::text=ANY($2::text[])) AND ($3='' OR p.url_path=$3 OR (p.url_pattern IS NOT NULL AND $3 LIKE replace(p.url_pattern,'*','%'))) AND ($4::timestamptz IS NULL OR (t.updated_at,t.id)<($4,$5::uuid)) ORDER BY t.updated_at DESC,t.id DESC LIMIT $6`, project, statusValues, page, func() any {
+			if cursor.UpdatedAt.IsZero() {
 				return nil
 			}
-			return cursor
+			return cursor.UpdatedAt
+		}(), func() any {
+			if cursor.ID == "" {
+				return nil
+			}
+			return cursor.ID
 		}(), limit+1)
 		if err != nil {
 			return err
@@ -203,8 +213,8 @@ func (s *Service) ListFiltered(ctx context.Context, tenant, project string, stat
 		return rows.Err()
 	})
 	if len(out) > limit {
-		value := out[limit-1].UpdatedAt
-		next = &value
+		last := out[limit-1]
+		next = &Cursor{UpdatedAt: last.UpdatedAt, ID: last.ID}
 		out = out[:limit]
 	}
 	return out, next, err

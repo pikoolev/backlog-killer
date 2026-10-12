@@ -68,6 +68,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/embed/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["exchangeEmbedCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/tickets": {
         parameters: {
             query?: never;
@@ -422,6 +438,117 @@ export interface components {
             } | null;
             permissions: string[];
         };
+        CreateTenant: {
+            name: string;
+            projectName: string;
+            projectKey: string;
+        };
+        CreateProject: {
+            /** Format: uuid */
+            tenantId: string;
+            name: string;
+            projectKey: string;
+        };
+        ProjectRef: {
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: uuid */
+            projectId: string;
+            projectKey: string;
+            name: string;
+            role: string;
+        };
+        Identity: {
+            principal: {
+                [key: string]: unknown;
+            };
+            projects: components["schemas"]["ProjectRef"][];
+            platformAdmin: boolean;
+        };
+        Origin: {
+            /** Format: uri */
+            origin: string;
+        };
+        Member: {
+            /** Format: uuid */
+            userId: string;
+            /** Format: email */
+            email: string;
+            /** @enum {string} */
+            role: "owner" | "admin" | "triager" | "reporter";
+            owner: boolean;
+        };
+        ProjectSettings: {
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: uuid */
+            id: string;
+            projectKey: string;
+            name: string;
+            role: string;
+            origins: components["schemas"]["Origin"][];
+            members: components["schemas"]["Member"][];
+        };
+        AcceptInvitation: {
+            code: string;
+        };
+        CreateInvitation: {
+            /** Format: email */
+            email: string;
+            /** @enum {string} */
+            role: "admin" | "triager" | "reporter";
+        };
+        Invitation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uri */
+            url: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        ProjectMembership: {
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: uuid */
+            projectId: string;
+            role: string;
+        };
+        UpdateMember: {
+            /** @enum {string} */
+            role: "admin" | "triager" | "reporter";
+        };
+        TokenInfo: {
+            /** Format: uuid */
+            id: string;
+            prefix: string;
+            scopes: string[];
+            /** Format: date-time */
+            expiresAt?: string | null;
+            /** Format: date-time */
+            revokedAt?: string | null;
+            /** Format: date-time */
+            lastUsedAt?: string | null;
+        };
+        TokenSecret: components["schemas"]["TokenInfo"] & {
+            secret: string;
+        };
+        CreateToken: {
+            scopes: ("tickets:read" | "tickets:claim" | "tickets:comment" | "tickets:complete")[];
+            /** Format: date-time */
+            expiresAt?: string | null;
+        };
+        EmbedTokenRequest: {
+            projectKey: string;
+            code: string;
+            verifier: string;
+        };
+        EmbedTokenResponse: {
+            accessToken: string;
+            /** @constant */
+            expiresIn: 300;
+            /** Format: uuid */
+            projectId: string;
+        };
         Error: {
             code: string;
             message: string;
@@ -482,7 +609,15 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: components["responses"]["JSON"];
+            /** @description Identity */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Identity"];
+                };
+            };
             default: components["responses"]["Error"];
         };
     };
@@ -493,9 +628,21 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: components["requestBodies"]["JSON"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTenant"];
+            };
+        };
         responses: {
-            201: components["responses"]["JSON"];
+            /** @description Project */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSettings"];
+                };
+            };
             default: components["responses"]["Error"];
         };
     };
@@ -506,9 +653,21 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: components["requestBodies"]["JSON"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProject"];
+            };
+        };
         responses: {
-            201: components["responses"]["JSON"];
+            /** @description Project */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSettings"];
+                };
+            };
             default: components["responses"]["Error"];
         };
     };
@@ -519,9 +678,48 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: components["requestBodies"]["JSON"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptInvitation"];
+            };
+        };
         responses: {
-            200: components["responses"]["JSON"];
+            /** @description Membership */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectMembership"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    exchangeEmbedCode: {
+        parameters: {
+            query: {
+                project_key: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmbedTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Short-lived embed token */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbedTokenResponse"];
+                };
+            };
             default: components["responses"]["Error"];
         };
     };
@@ -867,7 +1065,15 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: components["responses"]["JSON"];
+            /** @description Project settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSettings"];
+                };
+            };
             default: components["responses"]["Error"];
         };
     };
@@ -880,9 +1086,21 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: components["requestBodies"]["JSON"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Origin"];
+            };
+        };
         responses: {
-            201: components["responses"]["JSON"];
+            /** @description Origin */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Origin"];
+                };
+            };
             default: components["responses"]["Error"];
         };
     };
@@ -918,9 +1136,21 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: components["requestBodies"]["JSON"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateInvitation"];
+            };
+        };
         responses: {
-            201: components["responses"]["JSON"];
+            /** @description Invitation */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Invitation"];
+                };
+            };
             default: components["responses"]["Error"];
         };
     };
@@ -956,7 +1186,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: components["requestBodies"]["JSON"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMember"];
+            };
+        };
         responses: {
             /** @description Updated */
             204: {
@@ -979,7 +1213,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: components["responses"]["JSON"];
+            /** @description Tokens */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["TokenInfo"][];
+                    };
+                };
+            };
             default: components["responses"]["Error"];
         };
     };
@@ -992,9 +1236,21 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: components["requestBodies"]["JSON"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateToken"];
+            };
+        };
         responses: {
-            201: components["responses"]["JSON"];
+            /** @description Token secret */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenSecret"];
+                };
+            };
             default: components["responses"]["Error"];
         };
     };

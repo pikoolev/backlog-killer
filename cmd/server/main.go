@@ -2,8 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -105,7 +104,7 @@ func main() {
 	for _, subject := range cfg.PlatformAdminSubjects {
 		platformAdmins[subject] = true
 	}
-	application := &api{service: service, attachments: &attachments.Service{DB: pool, Root: cfg.StoragePath}, invitations: &projects.Invitations{DB: pool}, tokens: &projects.Tokens{DB: pool}, admin: &projects.Admin{DB: pool}, flows: &auth.Flows{DB: pool}, embedIssuer: auth.EmbedIssuer{Key: []byte(cfg.EmbedSigningKey), Issuer: cfg.APIPublicURL, Audience: cfg.OIDCAudience}, webPublicURL: cfg.WebPublicURL, oidcPublicIssuer: cfg.OIDCPublicIssuer, oidcInternalIssuer: cfg.OIDCIssuer, oidcClientID: cfg.OIDCClientID, oidcClientSecret: cfg.OIDCClientSecret, platformAdminSubjects: platformAdmins, authenticator: authentication}
+	application := &api{service: service, attachments: &attachments.Service{DB: pool, Root: cfg.StoragePath, ProjectQuotaBytes: cfg.StorageProjectQuotaBytes}, invitations: &projects.Invitations{DB: pool}, tokens: &projects.Tokens{DB: pool}, admin: &projects.Admin{DB: pool}, flows: &auth.Flows{DB: pool}, embedIssuer: auth.EmbedIssuer{Key: []byte(cfg.EmbedSigningKey), Issuer: cfg.APIPublicURL, Audience: cfg.OIDCAudience}, webPublicURL: cfg.WebPublicURL, oidcPublicIssuer: cfg.OIDCPublicIssuer, oidcInternalIssuer: cfg.OIDCIssuer, oidcClientID: cfg.OIDCClientID, oidcClientSecret: cfg.OIDCClientSecret, platformAdminSubjects: platformAdmins, authenticator: authentication}
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
@@ -115,6 +114,7 @@ func main() {
 				return
 			case <-ticker.C:
 				_ = application.attachments.Cleanup(context.Background())
+				_ = application.attachments.Reconcile(context.Background())
 				_, _ = pool.Exec(context.Background(), `DELETE FROM embed_auth_flows WHERE expires_at<now()-interval '1 hour'; DELETE FROM idempotency_keys WHERE created_at<now()-interval '7 days'; DELETE FROM invitations WHERE expires_at<now()-interval '30 days'`)
 			}
 		}
@@ -313,7 +313,7 @@ func (a *api) createProject(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) createTenant(w http.ResponseWriter, r *http.Request) {
 	p, ok := auth.FromContext(r.Context())
-	if !ok || p.Kind == "agent" || !a.platformAdminSubjects[p.Subject] {
+	if !ok || p.Source != "oidc" || !a.platformAdminSubjects[p.Issuer+"|"+p.Subject] {
 		writeError(w, r, &backlog.Error{Code: "forbidden", Status: 403, Message: "platform administrator required"})
 		return
 	}
@@ -522,7 +522,7 @@ func (a *api) me(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	jsonResponse(w, 200, map[string]any{"principal": p, "projects": items, "platformAdmin": a.platformAdminSubjects[p.Subject]})
+	jsonResponse(w, 200, map[string]any{"principal": p, "projects": items, "platformAdmin": a.platformAdminSubjects[p.Issuer+"|"+p.Subject]})
 }
 func (a *api) list(w http.ResponseWriter, r *http.Request) {
 	p, ok := authorize(r, "tickets:read")
@@ -553,14 +553,24 @@ func (a *api) list(w http.ResponseWriter, r *http.Request) {
 		}
 		statuses = append(statuses, status)
 	}
-	var cursor time.Time
+	cursor := backlog.Cursor{}
 	if raw := r.URL.Query().Get("cursor"); raw != "" {
-		var err error
-		cursor, err = time.Parse(time.RFC3339Nano, raw)
+		decoded, err := base64.RawURLEncoding.DecodeString(raw)
 		if err != nil {
 			writeError(w, r, &backlog.Error{Code: "invalid_cursor", Status: 400, Message: "invalid cursor"})
 			return
 		}
+		parts := strings.SplitN(string(decoded), "|", 2)
+		if len(parts) != 2 {
+			writeError(w, r, &backlog.Error{Code: "invalid_cursor", Status: 400, Message: "invalid cursor"})
+			return
+		}
+		cursor.UpdatedAt, err = time.Parse(time.RFC3339Nano, parts[0])
+		if err != nil {
+			writeError(w, r, &backlog.Error{Code: "invalid_cursor", Status: 400, Message: "invalid cursor"})
+			return
+		}
+		cursor.ID = parts[1]
 	}
 	items, next, err := a.service.ListFiltered(r.Context(), p.TenantID, project, statuses, r.URL.Query().Get("page"), limit, cursor)
 	if err != nil {
@@ -569,7 +579,7 @@ func (a *api) list(w http.ResponseWriter, r *http.Request) {
 	}
 	var nextCursor any
 	if next != nil {
-		nextCursor = next.Format(time.RFC3339Nano)
+		nextCursor = base64.RawURLEncoding.EncodeToString([]byte(next.UpdatedAt.Format(time.RFC3339Nano) + "|" + next.ID))
 	}
 	jsonResponse(w, 200, map[string]any{"items": items, "nextCursor": nextCursor})
 }
@@ -855,133 +865,5 @@ func (a *api) claim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, 201, map[string]string{"batchId": id})
-}
-func (a *api) projectIdentity(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		principal, ok := auth.FromContext(r.Context())
-		if !ok || principal.Kind == "agent" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		if principal.Issuer == "" && principal.TenantID != "" {
-			if principal.ProjectID != chi.URLParam(r, "projectId") {
-				writeError(w, r, backlog.ErrNotFound)
-				return
-			}
-			next.ServeHTTP(w, r)
-			return
-		}
-		projectID := chi.URLParam(r, "projectId")
-		var userID, tenantID, resolvedProjectID, role string
-		err := a.service.DB.QueryRow(r.Context(), `SELECT user_id,tenant_id,project_id,role FROM resolve_project_identity($1,$2,$3)`, principal.Issuer, principal.Subject, projectID).Scan(&userID, &tenantID, &resolvedProjectID, &role)
-		if err != nil {
-			writeError(w, r, backlog.ErrNotFound)
-			return
-		}
-		principal.ID, principal.TenantID, principal.ProjectID, principal.Role = userID, tenantID, resolvedProjectID, role
-		next.ServeHTTP(w, r.WithContext(auth.WithPrincipal(r.Context(), principal)))
-	})
-}
-
-func (a *api) dashboardCors(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		if origin == a.webPublicURL {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Add("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,Idempotency-Key,If-Match")
-			if r.Method == http.MethodOptions {
-				w.WriteHeader(204)
-				return
-			}
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func (a *api) cors(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		projectID := chi.URLParam(r, "projectId")
-		var allowed bool
-		_ = a.service.DB.QueryRow(r.Context(), `SELECT lookup_project_id_origin($1,$2)`, projectID, origin).Scan(&allowed)
-		if !allowed {
-			writeError(w, r, &backlog.Error{Code: "origin_forbidden", Status: 403, Message: "origin not allowed"})
-			return
-		}
-		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Vary", "Origin")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,Idempotency-Key,If-Match")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func authorize(r *http.Request, scope string) (auth.Principal, bool) {
-	p, ok := auth.FromContext(r.Context())
-	if !ok {
-		return p, false
-	}
-	if p.Kind == "agent" && !p.Scopes[scope] {
-		return p, false
-	}
-	return p, true
-}
-func actor(p auth.Principal) backlog.Actor {
-	return backlog.Actor{Kind: p.Kind, ID: p.ID, Name: p.Name, Role: p.Role, Scopes: p.Scopes}
-}
-func decode(r *http.Request, target any) error {
-	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
-		return &backlog.Error{Code: "content_type", Status: 415, Message: "application/json required"}
-	}
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return &backlog.Error{Code: "invalid_json", Status: 400, Message: "invalid request body"}
-	}
-	return nil
-}
-func securityHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Cache-Control", "private, no-store")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
-		next.ServeHTTP(w, r)
-	})
-}
-func writeError(w http.ResponseWriter, r *http.Request, err error) {
-	status := 500
-	code := "internal_error"
-	message := "internal server error"
-	var domain *backlog.Error
-	if errors.As(err, &domain) {
-		status = domain.Status
-		code = domain.Code
-		message = domain.Message
-	}
-	id := middleware.GetReqID(r.Context())
-	if id == "" {
-		var b [8]byte
-		_, _ = rand.Read(b[:])
-		id = hex.EncodeToString(b[:])
-	}
-	if status >= 500 {
-		slog.Error("request failed", "requestId", id, "error", err)
-	}
-	jsonResponse(w, status, errorBody{Code: code, Message: message, RequestID: id})
-}
-func jsonResponse(w http.ResponseWriter, status int, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
 }
 func fatal(err error) { slog.Error("fatal", "error", err); os.Exit(1) }

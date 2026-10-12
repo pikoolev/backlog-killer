@@ -13,6 +13,7 @@ type Config struct {
 	OIDCClientID, OIDCClientSecret                                                                   string
 	APIPublicURL, WebPublicURL, EmbedSigningKey, StorageDriver, StoragePath                          string
 	MCPAllowedOrigins, PlatformAdminSubjects                                                         []string
+	StorageProjectQuotaBytes                                                                         int64
 	LocalDemoSeed                                                                                    bool
 	OnPremTenant, OnPremProject, OnPremProjectKey, OnPremOwnerSubject, OnPremOwnerEmail              string
 	OnPremProjectOrigin                                                                              string
@@ -26,6 +27,10 @@ func Load() (Config, error) {
 		StorageDriver: env("STORAGE_DRIVER", "filesystem"), StoragePath: os.Getenv("STORAGE_PATH"), MCPAllowedOrigins: split(os.Getenv("MCP_ALLOWED_ORIGINS")), PlatformAdminSubjects: split(os.Getenv("PLATFORM_ADMIN_SUBJECTS")),
 	}
 	c.OnPremTenant, c.OnPremProject, c.OnPremProjectKey = os.Getenv("ONPREM_TENANT_NAME"), os.Getenv("ONPREM_PROJECT_NAME"), os.Getenv("ONPREM_PROJECT_KEY")
+	quota := env("STORAGE_PROJECT_QUOTA_BYTES", "1073741824")
+	if _, err := fmt.Sscan(quota, &c.StorageProjectQuotaBytes); err != nil || c.StorageProjectQuotaBytes < 10<<20 {
+		return c, errors.New("STORAGE_PROJECT_QUOTA_BYTES must be at least 10485760")
+	}
 	c.OnPremOwnerSubject, c.OnPremOwnerEmail, c.OnPremProjectOrigin = os.Getenv("ONPREM_OWNER_SUBJECT"), os.Getenv("ONPREM_OWNER_EMAIL"), os.Getenv("ONPREM_PROJECT_ORIGIN")
 	seed := os.Getenv("LOCAL_DEMO_SEED")
 	if seed != "" && seed != "true" && seed != "false" {

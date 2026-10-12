@@ -1,6 +1,8 @@
 package httpops
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
@@ -19,12 +21,24 @@ type Limiter struct {
 	values map[string]bucket
 }
 
+const maxLimiterKeys = 10000
+
 func NewLimiter() *Limiter { return &Limiter{values: map[string]bucket{}} }
 func (l *Limiter) Allow(key string, limit int) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
-	value := l.values[key]
+	value, exists := l.values[key]
+	if !exists && len(l.values) >= maxLimiterKeys {
+		for k, v := range l.values {
+			if now.Sub(v.start) > time.Minute {
+				delete(l.values, k)
+			}
+		}
+		if len(l.values) >= maxLimiterKeys {
+			return false
+		}
+	}
 	if now.Sub(value.start) >= time.Minute {
 		value = bucket{start: now}
 	}
@@ -33,14 +47,15 @@ func (l *Limiter) Allow(key string, limit int) bool {
 	}
 	value.count++
 	l.values[key] = value
-	if len(l.values) > 10000 {
-		for k, v := range l.values {
-			if now.Sub(v.start) > 2*time.Minute {
-				delete(l.values, k)
-			}
-		}
-	}
 	return true
+}
+func credentialKey(r *http.Request) string {
+	raw := r.Header.Get("Authorization")
+	if raw == "" {
+		return ClientIP(r)
+	}
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:16])
 }
 func ClientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -59,13 +74,13 @@ func (l *Limiter) Middleware(next http.Handler) http.Handler {
 			scope = "embed:" + ClientIP(r)
 		case r.URL.Path == "/mcp":
 			limit = 120
-			scope = "mcp:" + r.Header.Get("Authorization")
+			scope = "mcp:" + credentialKey(r)
 		case strings.Contains(r.URL.Path, "/attachments"):
 			limit = 10
-			scope = "upload:" + r.Header.Get("Authorization")
+			scope = "upload:" + credentialKey(r)
 		case (r.Method == "POST" || r.Method == "PATCH") && strings.Contains(r.URL.Path, "/tickets"):
 			limit = 60
-			scope = "mutation:" + r.Header.Get("Authorization")
+			scope = "mutation:" + credentialKey(r)
 		}
 		if limit > 0 && !l.Allow(scope, limit) {
 			w.Header().Set("Retry-After", "60")

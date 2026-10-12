@@ -1,0 +1,1 @@
+-- Forward-only hardening migration. Restore the previous database recovery point to roll back.

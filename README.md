@@ -53,7 +53,7 @@ OpenAPI is canonical at `openapi/openapi.yaml`; `pnpm check:generated` fails whe
 
 ## Working workflow
 
-1. A reporter signs into the embedded SDK, selects a DOM element, and creates a page-scoped ticket. Operational tickets remain as persistent pins and can be focused with `#backlog-ticket=<uuid>`.
+1. A reporter signs into the embedded SDK, selects a DOM element with an explicit right click, and creates a page-scoped ticket. Operational tickets remain as persistent pins and can be focused with `?backlog-ticket=<uuid>`.
 2. A triager edits the title/specification/priority/due date and atomically moves the ticket to `in_progress`.
 3. An agent uses a project PAT with REST or `/mcp`, reads the complete event/attachment history, claims an idempotent batch, and submits `agentComment` plus durable `workLog`.
 4. An administrator accepts review work or returns it to rework with a mandatory comment. Deleted tickets restore only to their recorded previous status.
@@ -66,7 +66,7 @@ Local Compose is a development fixture. Production must use both files and expli
 
 ```sh
 export API_PUBLIC_HOST=api.example.com WEB_PUBLIC_HOST=backlog.example.com OIDC_PUBLIC_HOST=identity.example.com
-export DEPLOYMENT_MODE=saas PLATFORM_ADMIN_SUBJECTS='production-owner-oidc-subject'
+export DEPLOYMENT_MODE=saas PLATFORM_ADMIN_SUBJECTS='https://identity.example.com/realms/backlog-killer|production-owner-oidc-subject'
 export POSTGRES_MIGRATION_USER=backlog_migrator POSTGRES_MIGRATION_PASSWORD='...' POSTGRES_PASSWORD='...'
 export KEYCLOAK_DB_PASSWORD='...' KEYCLOAK_ADMIN_USERNAME=admin KEYCLOAK_ADMIN_PASSWORD='...' EMBED_SIGNING_KEY='...'
 docker compose -f docker-compose.yml -f compose.production.yml config

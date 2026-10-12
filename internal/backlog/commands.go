@@ -104,6 +104,9 @@ func (s *Service) Bulk(ctx context.Context, tenant, project, principal, key stri
 				metadata["dueDate"] = input.DueDate
 			case "delete":
 				_, err = tx.Exec(ctx, `UPDATE tickets SET previous_status=status,status='deleted',deleted_at=now(),version=version+1,updated_at=now() WHERE tenant_id=$1 AND project_id=$2 AND id=$3`, tenant, project, id)
+				if err = releaseTicketClaim(ctx, tx, tenant, project, id); err != nil {
+					return err
+				}
 			}
 			if err != nil {
 				return err

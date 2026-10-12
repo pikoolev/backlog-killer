@@ -1,4 +1,12 @@
 # Changelog
+## Unreleased — Production hardening
+
+- Bound embed, mutation, upload, and MCP rate-limit state without retaining bearer credentials in memory.
+- Added cursor pagination end to end, stale-response guards, project-safe ticket details, and bounded attachment download URLs.
+- Restricted annotation to explicit right click and screenshots to the selected element with form/private-content masking.
+- Hardened tenant/project authorization, invitation acceptance, claim restore/delete handling, on-prem bootstrap, attachment quotas, deletion reconciliation, and platform-admin issuer binding.
+- Added complete OpenAPI administration/embed DTOs, an executable production Compose smoke, managed Keycloak realm updates, and consistent application/Keycloak/attachment backup and restore.
+
 
 ## 0.2.0 — Local SaaS release candidate
 

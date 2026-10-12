@@ -20,9 +20,9 @@ import (
 )
 
 type Principal struct {
-	Kind, ID, Name, Issuer, Subject, Email, TenantID, ProjectID, Role string
-	EmailVerified                                                     bool
-	Scopes                                                            map[string]bool
+	Kind, Source, ID, Name, Issuer, Subject, Email, TenantID, ProjectID, Role string
+	EmailVerified                                                             bool
+	Scopes                                                                    map[string]bool
 }
 type contextKey struct{}
 
@@ -97,6 +97,7 @@ func (a *Authenticator) pat(ctx context.Context, raw string) (Principal, error) 
 		return Principal{}, errors.New("invalid PAT")
 	}
 	p.Kind = "agent"
+	p.Source = "pat"
 	p.Role = "agent"
 	p.Scopes = map[string]bool{}
 	for _, s := range scopes {
@@ -117,7 +118,7 @@ func (a *Authenticator) embed(raw string) (Principal, error) {
 	if err != nil || !token.Valid {
 		return Principal{}, errors.New("invalid embed token")
 	}
-	return Principal{Kind: "user", ID: claims.Subject, Subject: claims.Subject, TenantID: claims.TenantID, ProjectID: claims.ProjectID, Role: claims.Role, Scopes: map[string]bool{}}, nil
+	return Principal{Kind: "user", Source: "embed", ID: claims.Subject, Subject: claims.Subject, TenantID: claims.TenantID, ProjectID: claims.ProjectID, Role: claims.Role, Scopes: map[string]bool{}}, nil
 }
 
 type claims struct {
@@ -139,7 +140,7 @@ func (a *Authenticator) oidc(ctx context.Context, raw string) (Principal, error)
 	if err != nil || !token.Valid {
 		return Principal{}, errors.New("invalid OIDC token")
 	}
-	return Principal{Kind: "user", ID: c.Subject, Name: c.PreferredUsername, Issuer: c.Issuer, Subject: c.Subject, Email: c.Email, EmailVerified: c.EmailVerified, Scopes: map[string]bool{}}, nil
+	return Principal{Kind: "user", Source: "oidc", ID: c.Subject, Name: c.PreferredUsername, Issuer: c.Issuer, Subject: c.Subject, Email: c.Email, EmailVerified: c.EmailVerified, Scopes: map[string]bool{}}, nil
 }
 func (a *Authenticator) key(ctx context.Context, kid string) (*rsa.PublicKey, error) {
 	a.mu.Lock()

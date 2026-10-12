@@ -77,12 +77,19 @@ func BootstrapOnPrem(ctx context.Context, pool *pgxpool.Pool, in OnPremBootstrap
 		return err
 	}
 	var tenant, user, project string
-	if err = tx.QueryRow(ctx, `SELECT id FROM tenants ORDER BY created_at,id LIMIT 1`).Scan(&tenant); errors.Is(err, pgx.ErrNoRows) {
+	var tenantCount int
+	if err = tx.QueryRow(ctx, `SELECT count(*) FROM tenants`).Scan(&tenantCount); err != nil {
+		return err
+	}
+	if tenantCount > 1 {
+		return errors.New("on-prem bootstrap requires an empty or single-tenant database")
+	}
+	if tenantCount == 0 {
 		if err = tx.QueryRow(ctx, `INSERT INTO tenants(name) VALUES($1) RETURNING id`, in.TenantName).Scan(&tenant); err != nil {
 			return err
 		}
-	} else if err != nil {
-		return fmt.Errorf("resolve on-prem tenant: %w", err)
+	} else if err = tx.QueryRow(ctx, `SELECT t.id FROM tenants t WHERE EXISTS (SELECT 1 FROM projects p WHERE p.tenant_id=t.id AND p.project_key=$1)`, in.ProjectKey).Scan(&tenant); err != nil {
+		return errors.New("existing on-prem tenant does not match ONPREM_PROJECT_KEY")
 	}
 	if _, err = tx.Exec(ctx, `UPDATE tenants SET name=$1 WHERE id=$2`, in.TenantName, tenant); err != nil {
 		return err

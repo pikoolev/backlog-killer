@@ -30,8 +30,9 @@ const MaxSize = 10 << 20
 var safeName = regexp.MustCompile(`[^a-zA-Z0-9._ -]+`)
 
 type Service struct {
-	DB   *pgxpool.Pool
-	Root string
+	DB                *pgxpool.Pool
+	Root              string
+	ProjectQuotaBytes int64
 }
 type Metadata struct {
 	ID        string `json:"id"`
@@ -101,12 +102,22 @@ func (s *Service) Upload(ctx context.Context, tenant, project, ticket, name stri
 	}
 	out := Metadata{ID: uuid.Must(uuid.NewV7()).String(), Name: display, MediaType: media, Size: int64(len(data)), SHA256: hex.EncodeToString(sum[:])}
 	err = store.WithTenant(ctx, s.DB, tenant, func(ctx context.Context, tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `SELECT id FROM tickets WHERE project_id=$1 AND id=$2 FOR UPDATE`, project, ticket); err != nil {
+			return err
+		}
 		var count int
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM ticket_attachments WHERE project_id=$1 AND ticket_id=$2 AND deleted_at IS NULL`, project, ticket).Scan(&count); err != nil {
+		var used int64
+		if err := tx.QueryRow(ctx, `SELECT count(*),COALESCE(sum(size_bytes),0) FROM ticket_attachments WHERE project_id=$1 AND ticket_id=$2 AND deleted_at IS NULL`, project, ticket).Scan(&count, &used); err != nil {
 			return err
 		}
 		if count >= 5 {
 			return errors.New("attachment limit reached")
+		}
+		if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(size_bytes),0) FROM ticket_attachments WHERE project_id=$1 AND deleted_at IS NULL`, project).Scan(&used); err != nil {
+			return err
+		}
+		if s.ProjectQuotaBytes > 0 && used+int64(len(data)) > s.ProjectQuotaBytes {
+			return errors.New("project attachment quota exceeded")
 		}
 		_, err := tx.Exec(ctx, `INSERT INTO ticket_attachments(id,tenant_id,project_id,ticket_id,storage_key,display_name,media_type,size_bytes,sha256) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, out.ID, tenant, project, ticket, key, display, media, len(data), sum[:])
 		return err
@@ -170,6 +181,39 @@ func (s *Service) Cleanup(ctx context.Context) error {
 		}
 	}
 	return rows.Err()
+}
+
+func (s *Service) Reconcile(ctx context.Context) error {
+	entries, err := os.ReadDir(s.Root)
+	if err != nil {
+		return err
+	}
+	known := map[string]bool{}
+	rows, err := s.DB.Query(ctx, `SELECT storage_key FROM ticket_attachments UNION SELECT storage_key FROM storage_deletions WHERE completed_at IS NULL`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var key string
+		if err = rows.Scan(&key); err != nil {
+			rows.Close()
+			return err
+		}
+		known[key] = true
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, entry := range entries {
+		if entry.Type().IsRegular() && !known[entry.Name()] {
+			if err := os.Remove(filepath.Join(s.Root, entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func Disposition(name, media string) string {

@@ -144,7 +144,10 @@ func required(ctx context.Context, scope string) (auth.Principal, error) {
 	if !ok {
 		return p, fmt.Errorf("unauthenticated")
 	}
-	if p.Kind == "agent" && !p.Scopes[scope] {
+	if p.Source != "pat" || p.Kind != "agent" || p.TenantID == "" || p.ProjectID == "" {
+		return p, fmt.Errorf("project-bound PAT required")
+	}
+	if !p.Scopes[scope] {
 		return p, fmt.Errorf("missing scope %s", scope)
 	}
 	return p, nil

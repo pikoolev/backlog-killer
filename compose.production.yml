@@ -17,7 +17,8 @@ services:
       timeout: 5s
       retries: 20
   keycloak:
-    command: ["/opt/keycloak/config/start-production.sh"]
+    entrypoint: ["/opt/keycloak/config/start-production.sh"]
+    command: []
     ports: []
     restart: unless-stopped
     environment:

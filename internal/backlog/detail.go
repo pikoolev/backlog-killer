@@ -244,6 +244,11 @@ func (s *Service) changeDeleted(ctx context.Context, tenant, project, id string,
 		} else if from == Deleted || from == Done {
 			return &Error{"invalid_transition", 409, "ticket cannot be deleted"}
 		}
+		if !restore {
+			if err := releaseTicketClaim(ctx, tx, tenant, project, id); err != nil {
+				return err
+			}
+		}
 		_, err := tx.Exec(ctx, `UPDATE tickets SET previous_status=CASE WHEN $1::boolean THEN previous_status ELSE status END,status=$2,deleted_at=CASE WHEN $1::boolean THEN NULL ELSE now() END,version=version+1,updated_at=now() WHERE tenant_id=$3 AND project_id=$4 AND id=$5`, restore, to, tenant, project, id)
 		if err != nil {
 			return err
@@ -257,4 +262,22 @@ func (s *Service) changeDeleted(ctx context.Context, tenant, project, id string,
 		return nil
 	})
 	return out, err
+}
+
+func releaseTicketClaim(ctx context.Context, tx pgx.Tx, tenant, project, ticket string) error {
+	var batchID *string
+	if err := tx.QueryRow(ctx, `SELECT claimed_batch_id FROM tickets WHERE tenant_id=$1 AND project_id=$2 AND id=$3 FOR UPDATE`, tenant, project, ticket).Scan(&batchID); err != nil {
+		return err
+	}
+	if batchID == nil {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, `UPDATE agent_batch_tickets SET completed_at=now() WHERE tenant_id=$1 AND project_id=$2 AND batch_id=$3 AND ticket_id=$4 AND completed_at IS NULL`, tenant, project, *batchID, ticket); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE tickets SET claimed_batch_id=NULL WHERE tenant_id=$1 AND project_id=$2 AND id=$3`, tenant, project, ticket); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `UPDATE agent_batches b SET active=false,closed_at=now() WHERE b.tenant_id=$1 AND b.project_id=$2 AND b.id=$3 AND b.active AND NOT EXISTS (SELECT 1 FROM agent_batch_tickets bt WHERE bt.tenant_id=b.tenant_id AND bt.project_id=b.project_id AND bt.batch_id=b.id AND bt.completed_at IS NULL)`, tenant, project, *batchID)
+	return err
 }
