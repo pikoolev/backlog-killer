@@ -47,12 +47,33 @@ async function activeWebTab(windowId?:number){
  if(typeof target==='number'){try{const tabs=await chrome.tabs.query({active:true,windowId:target});const tab=tabs[0];return tab&&isWebTab(tab)?toActiveTab(tab):null}catch{if(windowId!==undefined)throw new Error('Окно сайта недоступно')}}
  const tabs=await chrome.tabs.query({active:true,lastFocusedWindow:true});const tab=tabs[0];return tab&&isWebTab(tab)?toActiveTab(tab):null;
 }
-async function clearCanvases(){const tabs=await chrome.tabs.query({});await Promise.allSettled(tabs.filter(isWebTab).map(tab=>chrome.tabs.sendMessage(tab.id,{type:'render-tickets',tickets:[]})))}
+type ContentMessage={type:'ping'|'start-selection-v2'|'stop-selection-v2'|'render-tickets-v2';tickets?:unknown[]};
+const injections=new Map<string,Promise<void>>();
+const missingReceiver=(error:unknown)=>/Receiving end does not exist|Could not establish connection|message port closed before a response was received/i.test(String(error));
+async function checkedTab(tabId:number,url:string){
+ const tab=await chrome.tabs.get(tabId);
+ if(!isWebTab(tab)||!tab.active||tab.url!==url)throw new Error('Активная страница изменилась. Повторите действие.');
+ return tab;
+}
+async function ensureContent(tabId:number,url:string){
+ await checkedTab(tabId,url);
+ try{const pong=await chrome.tabs.sendMessage(tabId,{type:'ping'}) as {ok?:boolean;url?:string};if(pong?.ok){if(pong.url!==url)throw new Error('Активная страница изменилась. Повторите действие.');return pong}}catch(error){if(!missingReceiver(error))throw error}
+ const key=`${tabId}:${url}`;
+ let pending=injections.get(key);
+ if(!pending){pending=(async()=>{await checkedTab(tabId,url);await chrome.scripting.executeScript({target:{tabId},files:['content.js']});await checkedTab(tabId,url)})();injections.set(key,pending);void pending.finally(()=>{if(injections.get(key)===pending)injections.delete(key)}).catch(()=>{})}
+ await pending;
+ const pong=await chrome.tabs.sendMessage(tabId,{type:'ping'}) as {ok?:boolean;url?:string};if(!pong?.ok||pong.url!==url)throw new Error('Не удалось подключиться к текущей странице');return pong;
+}
+async function contentMessage(tabId:number,url:string,message:ContentMessage){
+ const pong=await ensureContent(tabId,url);await checkedTab(tabId,url);
+ return message.type==='ping'?pong:chrome.tabs.sendMessage(tabId,message);
+}
+async function clearCanvases(){const tabs=await chrome.tabs.query({});await Promise.allSettled(tabs.filter(isWebTab).map(tab=>chrome.tabs.sendMessage(tab.id,{type:'render-tickets-v2',tickets:[]})))}
 async function logout(){const refreshToken=await invalidate();void clearCanvases().catch(()=>{});if(refreshToken){const body=new URLSearchParams({client_id:CLIENT,token:refreshToken,token_type_hint:'refresh_token'});void fetch(`${OIDC}/realms/${REALM}/protocol/openid-connect/revoke`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body}).catch(()=>{})}}
 const notifyTabChanged=()=>{void chrome.runtime.sendMessage({type:'active-tab-changed'}).catch(()=>{})};
 chrome.runtime.onInstalled.addListener(()=>{void chrome.storage.session.remove([SESSION_KEY,'authSessionV3','authGenerationV3','boundWebTabV3']);void chrome.storage.local.remove(['authSession','authSessionV2','authSessionV3'])});
 chrome.tabs.onActivated.addListener(info=>{void chrome.storage.session.set({[WINDOW_KEY]:info.windowId}).then(notifyTabChanged)});
 chrome.tabs.onUpdated.addListener((_id,change,tab)=>{if((change.status==='complete'||change.url)&&tab.active)notifyTabChanged()});
 chrome.tabs.onRemoved.addListener(()=>notifyTabChanged());
-chrome.runtime.onMessage.addListener((message,_sender,send)=>{if(!['login','session','active-tab','logout','api'].includes(message?.type))return false;void(async()=>{try{if(message.type==='login')send({ok:true,session:await login()});else if(message.type==='session')send({ok:true,session:await session()});else if(message.type==='active-tab')send({ok:true,data:await activeWebTab(message.windowId)});else if(message.type==='logout'){await logout();send({ok:true})}else if(message.type==='api')send({ok:true,data:await api(message.path,message.init)})}catch(error){send({ok:false,error:error instanceof Error?error.message:String(error)})}})();return true});
+chrome.runtime.onMessage.addListener((message,_sender,send)=>{if(!['login','session','active-tab','logout','api','content-message'].includes(message?.type))return false;void(async()=>{try{if(message.type==='login')send({ok:true,session:await login()});else if(message.type==='session')send({ok:true,session:await session()});else if(message.type==='active-tab')send({ok:true,data:await activeWebTab(message.windowId)});else if(message.type==='logout'){await logout();send({ok:true})}else if(message.type==='api')send({ok:true,data:await api(message.path,message.init)});else if(message.type==='content-message')send({ok:true,data:await contentMessage(message.tabId,message.url,message.message)})}catch(error){send({ok:false,error:error instanceof Error?error.message:String(error)})}})();return true});
 chrome.action.onClicked.addListener(tab=>{void chrome.storage.session.set({[WINDOW_KEY]:tab.windowId});void chrome.sidePanel.open({windowId:tab.windowId}).catch(()=>{})});

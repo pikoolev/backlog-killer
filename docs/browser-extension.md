@@ -26,6 +26,9 @@ The production client is **КонцертCRM**, project key `concert-crm`, with 
 
 - The active tab in the side panel's own browser window is matched against exact project origins configured in the dashboard. Switching to a browser-internal tab shows no active site instead of retaining another page's project.
 - Statistics are collapsed by default; the compact summary expands to show every workflow status.
-- **Добавить тикет** starts element selection in the active page. Press the left and right mouse buttons together on the target block, enter the task, choose priority, and submit.
+- **Поставить стикер** включает отдельный слой поверх страницы. Затем поставь черновой стикер одним левым кликом; `Esc` отменяет. Опиши задачу в панели и нажми **Создать тикет**.
+- Если вкладка была открыта до обновления, content script подключается автоматически при выборе стикера. Повторное нажатие **Reload** после обновления не требуется.
+- Стикер запоминает точный URL экрана, текущий внутренний маршрут/выбранную вкладку, элемент и точку клика. Привязанная заметка двигается вместе со страницей и появляется снова только на сохранённом экране. Содержимое форм не попадает в anchor.
+- The isolated overlay records the full page URL, visible internal route/tab, element and click position. Sticky notes belong only to that exact screen, follow page scroll and resize, and reappear when returning to it. Text/form controls are not copied into anchor metadata.
 - Active tickets for the current URL path appear on the page as yellow sticky notes anchored to their selected elements. Creating a ticket refreshes the canvas immediately.
 - The current-page sidebar list is deliberately concise. Full editing, review, attachments, and agent workflow remain in the dashboard and MCP API.

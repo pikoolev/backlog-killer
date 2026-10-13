@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.4 — Screen-aware sticker canvas
+
+- Replaced the two-button anchor gesture with an isolated page-wide canvas: left click places a preview sticker, Escape cancels, and the panel saves its selected screen and click position with the ticket.
+- Dynamically injects and verifies the content script for already-open pages; reinjection tears down previous listeners without leaving stale canvases.
+- Restores sticky notes only on their exact page URL/internal tab and keeps anchored positions aligned across scrolling and resizing.
+- Verified live Chromium login, page-script injection, ordinary left-click selection, Escape and ticket creation through the production API.
+
 ## 0.2.3 — ConcertCRM extension release
 
 - Rebuilt the published extension to replace the stale 0.2.2 panel; unauthenticated users now see login rather than a non-working logout button.

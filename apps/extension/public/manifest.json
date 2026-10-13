@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Backlog Killer",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Sidebar для постановки и просмотра тикетов на сайтах клиентов.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiLLMNDumlM+Y40OGE9u4r/jKgGVN4HflSZlnqT6OOpHcgkxgh1nIxzpZnfesrgOP08utnK4AitlLqpcJiOypVxeO1yJOLWunC/Gl6dyOCEqch1gP2q0Ma8/cPn9aqLC8y9t3KoMGNnKPvF2npZ2qw6fTbvxr0+nQJynQr9aYHNLLIAkxdaZQgOWurpEHBKkuIG1YoffPb+3kfZ/jkQykAjIcMeC2fVZfJbagb9+TITeje4ToeEQdNj2PNbuJx71d5injXMuHWXUSpDwd/gzMYsu0/N1fwQPIpHl/nW6pbJMwaW61l58SkyT+Lc8wffMYevfyYUNCJwJblTj7zMyzMwIDAQAB",
   "permissions": ["sidePanel", "tabs", "identity", "storage", "scripting"],
