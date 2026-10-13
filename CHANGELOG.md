@@ -10,6 +10,7 @@
 - Allowed the exact dashboard URL through project-scoped CORS so administrators can add a project's first client origin; embed origins remain restricted to the project's allowlist.
 - Added dedicated super-admin Clients, Projects, and Users sidebar catalogs plus dashboard ticket creation and inline backlog deletion.
 - Allowed only the pinned production extension origin through project CORS, added in-page yellow ticket notes, two-button element selection, immediate post-create canvas refresh, and collapsed extension statistics.
+- Versioned extension sessions, forced explicit login after install/update, made logout clear session and every canvas atomically, and moved active web-tab discovery to the background worker.
 
 
 ## 0.2.0 — Local SaaS release candidate
