@@ -11,6 +11,7 @@
 - Added dedicated super-admin Clients, Projects, and Users sidebar catalogs plus dashboard ticket creation and inline backlog deletion.
 - Allowed only the pinned production extension origin through project CORS, added in-page yellow ticket notes, two-button element selection, immediate post-create canvas refresh, and collapsed extension statistics.
 - Versioned extension sessions, forced explicit login after install/update, made logout clear session and every canvas atomically, and moved active web-tab discovery to the background worker.
+- Isolated extension auth in a v3 storage key, rejected late OIDC callbacks after logout, bound the side panel to the toolbar-selected web tab, and made logout update the UI before background canvas cleanup.
 
 
 ## 0.2.0 — Local SaaS release candidate
