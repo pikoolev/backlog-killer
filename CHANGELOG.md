@@ -1,4 +1,13 @@
 # Changelog
+
+## 0.2.3 — ConcertCRM extension release
+
+- Rebuilt the published extension to replace the stale 0.2.2 panel; unauthenticated users now see login rather than a non-working logout button.
+- Isolated V4 sessions, required explicit OIDC reauthentication, and prevented late refresh/login/API results from restoring signed-out state. Logout clears page notes and revokes the refresh token without waiting for the identity provider.
+- Resolved the active tab in the side panel's own window and discarded stale project, tab, and ticket responses.
+- Verified production PKCE login, exact ConcertCRM origin matching, real page-element selection, ticket creation and rendering, no-site logout, and a delayed-refresh/logout race in Chromium.
+- Preserved existing Keycloak passwords during reprovisioning and configured the extension audience from the deployment setting.
+
 ## Unreleased — Production hardening
 
 - Bound embed, mutation, upload, and MCP rate-limit state without retaining bearer credentials in memory.

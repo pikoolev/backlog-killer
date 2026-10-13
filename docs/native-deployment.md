@@ -24,6 +24,8 @@ The launcher reads `VPS_PASSWORD` from the Git-ignored local `.env` and passes i
 
 The provisioner creates database, Keycloak, and signing secrets on the VPS in `/etc/backlog-killer/secrets.env` with mode `0600`. The uploaded deployment configuration is deleted on success or failure.
 
+Existing Keycloak users and passwords are preserved during subsequent provisioning. `INITIAL_ADMIN_PASSWORD` is applied only when the initial administrator is first created; password changes belong in Keycloak, not application releases.
+
 ## SSH and fail2ban invariant
 
 The provisioner writes an SSH drop-in preserving:

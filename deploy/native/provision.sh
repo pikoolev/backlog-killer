@@ -228,7 +228,7 @@ else
   printf '%s' "$client_json" | "$KCADM" update "clients/$client_id" -r "$OIDC_REALM" --config "$KCADM_CONFIG" -f - >/dev/null
 fi
 extension_client=$("$KCADM" get clients -r "$OIDC_REALM" --config "$KCADM_CONFIG" -q clientId=backlog-killer-extension --fields id --format csv --noquotes | tr -d '\r')
-extension_json=$(jq -n '{clientId:"backlog-killer-extension",publicClient:true,standardFlowEnabled:true,directAccessGrantsEnabled:false,redirectUris:["https://nkkilejiaedcndfekaibdagbnodglnoe.chromiumapp.org/oidc"],webOrigins:[],protocolMappers:[{name:"audience",protocol:"openid-connect",protocolMapper:"oidc-audience-mapper",consentRequired:false,config:{"included.custom.audience":"backlog-killer-api","id.token.claim":"false","access.token.claim":"true"}}]}')
+extension_json=$(jq -n --arg aud "$OIDC_AUDIENCE" '{clientId:"backlog-killer-extension",publicClient:true,standardFlowEnabled:true,directAccessGrantsEnabled:false,redirectUris:["https://nkkilejiaedcndfekaibdagbnodglnoe.chromiumapp.org/oidc"],webOrigins:[],protocolMappers:[{name:"audience",protocol:"openid-connect",protocolMapper:"oidc-audience-mapper",consentRequired:false,config:{"included.custom.audience":$aud,"id.token.claim":"false","access.token.claim":"true"}}]}')
 if [[ -z $extension_client ]]; then
   printf '%s' "$extension_json" | "$KCADM" create clients -r "$OIDC_REALM" --config "$KCADM_CONFIG" -f - >/dev/null
 else
@@ -238,8 +238,8 @@ user_id=$("$KCADM" get users -r "$OIDC_REALM" --config "$KCADM_CONFIG" -q userna
 if [[ -z $user_id ]]; then
   "$KCADM" create users -r "$OIDC_REALM" --config "$KCADM_CONFIG" -s username="$INITIAL_ADMIN_USERNAME" -s email="$INITIAL_ADMIN_EMAIL" -s enabled=true -s emailVerified=true >/dev/null
   user_id=$("$KCADM" get users -r "$OIDC_REALM" --config "$KCADM_CONFIG" -q username="$INITIAL_ADMIN_USERNAME" --fields id --format csv --noquotes | tr -d '\r')
+  "$KCADM" set-password -r "$OIDC_REALM" --config "$KCADM_CONFIG" --userid "$user_id" --new-password "$INITIAL_ADMIN_PASSWORD" >/dev/null
 fi
-"$KCADM" set-password -r "$OIDC_REALM" --config "$KCADM_CONFIG" --userid "$user_id" --new-password "$INITIAL_ADMIN_PASSWORD" >/dev/null
 rm -f "$KCADM_CONFIG"
 
 cat >/etc/backlog-killer/api.env <<EOF
